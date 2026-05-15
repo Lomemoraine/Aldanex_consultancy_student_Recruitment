@@ -7,7 +7,7 @@ import {
   LayoutDashboard, User, FileText, GraduationCap,
   MessageSquare, Bell, CreditCard, Plane, LogOut, Menu, X
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import Logo from '@/components/Logo'
 
@@ -25,6 +25,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [userName, setUserName] = useState<string | null>(null)
+  const [studentId, setStudentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+
+      // Try session metadata first (instant, no DB needed)
+      const metaName = session.user.user_metadata?.full_name
+      if (metaName) setUserName(metaName.split(' ')[0])
+
+      // Then load from DB for student_id and accurate name
+      supabase
+        .from('profiles')
+        .select('full_name, student_id')
+        .eq('id', session.user.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.full_name) setUserName(data.full_name.split(' ')[0])
+          if (data?.student_id) setStudentId(data.student_id)
+        })
+    })
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -47,6 +70,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <X size={18} />
           </button>
         </div>
+
+        {/* Student name + ID badge */}
+        {userName && (
+          <div className="px-4 py-2.5 border-b border-brand-800 shrink-0">
+            <p className="text-xs font-semibold text-white leading-tight">{userName}</p>
+            <p className="text-[10px] text-brand-400 uppercase tracking-widest mt-0.5">
+              {studentId || 'Student'}
+            </p>
+          </div>
+        )}
 
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
@@ -89,6 +122,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-500 hover:text-gray-700">
             <Menu size={20} />
           </button>
+
+          {/* Breadcrumb: Aldanex | FirstName (Student) */}
+          <div className="hidden lg:flex items-center gap-2 text-sm text-gray-500">
+            <span className="font-bold text-brand-800">Aldanex</span>
+            <span className="text-gray-300">|</span>
+            {userName && (
+              <span className="font-semibold text-gray-700">{userName}</span>
+            )}
+            <span className="text-gray-400">(Student)</span>
+          </div>
+
           <div className="flex items-center gap-3 ml-auto">
             <Link href="/dashboard/notifications"
               className="relative p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
@@ -96,6 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           </div>
         </header>
+
         <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>

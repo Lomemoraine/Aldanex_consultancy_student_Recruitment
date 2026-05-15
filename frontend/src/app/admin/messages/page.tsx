@@ -76,9 +76,38 @@ export default function AdminMessagesPage() {
         .from('applications')
         .select('id, student_id')
 
-      // Counselors only see their assigned students; admins see all
+      // For counselors: show assigned applications PLUS any application
+      // where the counselor has received a message (student messaged them directly)
       if (profile?.role === 'counselor') {
-        appsQuery = appsQuery.eq('assigned_counselor_id', session.user.id)
+        // Get application IDs where this counselor is a message recipient
+        const { data: msgApps } = await supabase
+          .from('messages')
+          .select('application_id')
+          .eq('recipient_id', session.user.id)
+
+        const msgAppIds = [...new Set((msgApps || []).map((m: any) => m.application_id))]
+
+        // Also get assigned application IDs
+        const { data: assignedApps } = await supabase
+          .from('applications')
+          .select('id, student_id')
+          .eq('assigned_counselor_id', session.user.id)
+
+        const assignedIds = (assignedApps || []).map((a: any) => a.id)
+
+        // Union of both sets
+        const allAppIds = [...new Set([...assignedIds, ...msgAppIds])]
+
+        if (allAppIds.length === 0) {
+          setConversations([])
+          setLoadingConvs(false)
+          return
+        }
+
+        appsQuery = supabase
+          .from('applications')
+          .select('id, student_id')
+          .in('id', allAppIds)
       }
 
       const { data: apps } = await appsQuery

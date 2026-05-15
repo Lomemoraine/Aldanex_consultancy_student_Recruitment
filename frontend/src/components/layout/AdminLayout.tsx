@@ -33,16 +33,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
       supabase
         .from('profiles')
-        .select('role')
+        .select('role, full_name')
         .eq('id', session.user.id)
         .single()
-        .then(({ data }) => { if (data) setUserRole(data.role) })
+        .then(({ data }) => { if (data) { setUserRole(data.role); setUserName(data.full_name) } })
     })
   }, [])
 
@@ -73,12 +74,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
 
-        {/* Role badge */}
+        {/* Role + name badge */}
         {userRole && (
-          <div className="px-4 py-2 border-b border-brand-800">
-            <span className="text-xs font-medium text-brand-400 uppercase tracking-widest capitalize">
+          <div className="px-4 py-2.5 border-b border-brand-800">
+            <p className="text-xs font-semibold text-white capitalize leading-tight">
+              {userName?.split(' ')[0] || ''}
+            </p>
+            <p className="text-[10px] text-brand-400 uppercase tracking-widest mt-0.5">
               {userRole.replace('_', ' ')}
-            </span>
+            </p>
           </div>
         )}
 
@@ -118,10 +122,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-500 hover:text-gray-700">
             <Menu size={20} />
           </button>
-          <div className="hidden lg:flex items-center gap-2 text-sm text-gray-400">
-            <span className="font-semibold text-brand-800">Aldanex</span>
-            <span>/</span>
-            <span className="capitalize">{userRole?.replace('_', ' ') || 'Portal'}</span>
+          <div className="hidden lg:flex items-center gap-2 text-sm text-gray-500">
+            <span className="font-bold text-brand-800">Aldanex</span>
+            <span className="text-gray-300">|</span>
+            {userName && (
+              <span className="font-semibold text-gray-700">{userName.split(' ')[0]}</span>
+            )}
+            {userRole && (
+              <span className="text-gray-400 capitalize">
+                ({userRole.replace('_', ' ')})
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 ml-auto">
             <Link href="/admin/notifications"
