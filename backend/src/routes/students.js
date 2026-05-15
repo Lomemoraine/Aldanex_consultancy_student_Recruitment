@@ -6,19 +6,16 @@ const { authenticate, requireRole } = require('../middleware/auth');
 // GET /api/students - list all students (admin/counselor only)
 router.get('/', authenticate, requireRole('admin', 'counselor', 'admissions'), async (req, res) => {
   try {
-    const { page = 1, limit = 20, search, stage } = req.query;
-    const offset = (page - 1) * limit;
+    const { page = 1, limit = 50, search } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
 
+    // Simple query — no joins to avoid RLS issues
     let query = supabase
       .from('profiles')
-      .select(`
-        *,
-        student_profile:student_profiles(*),
-        application:applications(id, current_stage, assigned_counselor_id)
-      `, { count: 'exact' })
+      .select('id, full_name, email, student_id, nationality, preferred_study_destination, phone, created_at', { count: 'exact' })
       .eq('role', 'student')
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .range(offset, offset + Number(limit) - 1);
 
     if (search) {
       query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,student_id.ilike.%${search}%`);
@@ -27,8 +24,9 @@ router.get('/', authenticate, requireRole('admin', 'counselor', 'admissions'), a
     const { data, error, count } = await query;
     if (error) throw error;
 
-    res.json({ data, total: count, page: Number(page), limit: Number(limit) });
+    res.json({ data: data || [], total: count || 0, page: Number(page), limit: Number(limit) });
   } catch (err) {
+    console.error('GET /students error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

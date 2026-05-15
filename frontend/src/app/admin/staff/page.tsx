@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
-import { UserCog, Plus, X, RefreshCw, AlertCircle } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { UserCog, Plus, RefreshCw, AlertCircle, ShieldOff } from 'lucide-react'
 import clsx from 'clsx'
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  admin:        { label: 'Admin',          color: 'text-red-700',    bg: 'bg-red-100' },
-  counselor:    { label: 'Counselor',      color: 'text-blue-700',   bg: 'bg-blue-100' },
-  admissions:   { label: 'Admissions',     color: 'text-purple-700', bg: 'bg-purple-100' },
-  visa_officer: { label: 'Visa Officer',   color: 'text-green-700',  bg: 'bg-green-100' },
+  admin:        { label: 'Admin',         color: 'text-red-700',    bg: 'bg-red-100' },
+  counselor:    { label: 'Counselor',     color: 'text-blue-700',   bg: 'bg-blue-100' },
+  admissions:   { label: 'Admissions',    color: 'text-purple-700', bg: 'bg-purple-100' },
+  visa_officer: { label: 'Visa Officer',  color: 'text-green-700',  bg: 'bg-green-100' },
 }
 
 const EMPTY_FORM = { full_name: '', email: '', password: '', role: 'counselor', phone: '' }
@@ -17,13 +18,33 @@ const EMPTY_FORM = { full_name: '', email: '', password: '', role: 'counselor', 
 export default function AdminStaffPage() {
   const [staff, setStaff] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [success, setSuccess] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { setIsAdmin(false); setLoading(false); return }
+
+      supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+        .then(({ data }) => {
+          const admin = data?.role === 'admin'
+          setIsAdmin(admin)
+          if (admin) {
+            load()
+          } else {
+            setLoading(false)
+          }
+        })
+    })
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -61,6 +82,33 @@ export default function AdminStaffPage() {
     }
   }
 
+  // ── Loading state ─────────────────────────────────────────
+  if (loading || isAdmin === null) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
+      </div>
+    )
+  }
+
+  // ── Access denied ─────────────────────────────────────────
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <ShieldOff size={28} className="text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800">Access Denied</h2>
+          <p className="text-gray-500 mt-2 text-sm max-w-xs mx-auto">
+            Only administrators can manage staff accounts.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Admin view ────────────────────────────────────────────
   const grouped = staff.reduce((acc: Record<string, any[]>, s: any) => {
     if (!acc[s.role]) acc[s.role] = []
     acc[s.role].push(s)
@@ -69,10 +117,12 @@ export default function AdminStaffPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Staff Management</h1>
-          <p className="text-gray-500 mt-1">{staff.length} staff members</p>
+          <p className="text-gray-500 mt-1">{staff.length} staff member{staff.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={load} className="btn-secondary flex items-center gap-2 text-sm">
@@ -87,7 +137,7 @@ export default function AdminStaffPage() {
         </div>
       </div>
 
-      {/* Success message */}
+      {/* Success banner */}
       {success && (
         <div className="bg-green-50 border border-green-200 text-green-700 text-sm p-3 rounded-lg flex items-center gap-2">
           <AlertCircle size={16} /> {success}
@@ -99,7 +149,7 @@ export default function AdminStaffPage() {
         <div className="card border-2 border-brand-200">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-lg font-semibold">Add New Staff Member</h2>
-            <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
           </div>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -147,54 +197,52 @@ export default function AdminStaffPage() {
               <button type="submit" className="btn-primary flex items-center gap-2" disabled={submitting}>
                 <Plus size={16} /> {submitting ? 'Creating...' : 'Create Account'}
               </button>
-              <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">Cancel</button>
+              <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">
+                Cancel
+              </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Staff by role */}
-      {loading ? (
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
-        </div>
-      ) : (
-        Object.entries(ROLE_CONFIG).map(([role, cfg]) => {
-          const members = grouped[role] || []
-          if (members.length === 0) return null
-          return (
-            <div key={role} className="card">
-              <div className="flex items-center gap-2 mb-4">
-                <span className={clsx('badge', cfg.bg, cfg.color)}>{cfg.label}</span>
-                <span className="text-sm text-gray-400">{members.length} member{members.length !== 1 ? 's' : ''}</span>
-              </div>
-              <div className="space-y-3">
-                {members.map((m: any) => (
-                  <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-brand-100 flex items-center justify-center shrink-0">
-                        <UserCog size={16} className="text-brand-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{m.full_name}</p>
-                        <p className="text-xs text-gray-400">{m.email}</p>
-                      </div>
+      {/* Staff grouped by role */}
+      {Object.entries(ROLE_CONFIG).map(([role, cfg]) => {
+        const members = grouped[role] || []
+        if (members.length === 0) return null
+        return (
+          <div key={role} className="card">
+            <div className="flex items-center gap-2 mb-4">
+              <span className={clsx('badge', cfg.bg, cfg.color)}>{cfg.label}</span>
+              <span className="text-sm text-gray-400">
+                {members.length} member{members.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {members.map((m: any) => (
+                <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-brand-100 flex items-center justify-center shrink-0">
+                      <UserCog size={16} className="text-brand-600" />
                     </div>
-                    <div className="text-right">
-                      {m.phone && <p className="text-xs text-gray-500">{m.phone}</p>}
-                      <p className="text-xs text-gray-400">
-                        Joined {new Date(m.created_at).toLocaleDateString()}
-                      </p>
+                    <div>
+                      <p className="font-medium text-sm">{m.full_name}</p>
+                      <p className="text-xs text-gray-400">{m.email}</p>
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div className="text-right">
+                    {m.phone && <p className="text-xs text-gray-500">{m.phone}</p>}
+                    <p className="text-xs text-gray-400">
+                      Joined {new Date(m.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          )
-        })
-      )}
+          </div>
+        )
+      })}
 
-      {!loading && staff.length === 0 && (
+      {staff.length === 0 && (
         <div className="card text-center py-12">
           <UserCog size={32} className="text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500">No staff members yet. Add your first team member above.</p>

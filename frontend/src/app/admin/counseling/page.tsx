@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
-import { supabase } from '@/lib/supabase'
 import { Calendar, Plus, X, RefreshCw, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 import clsx from 'clsx'
 

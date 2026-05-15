@@ -5,33 +5,58 @@ import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard, Users, FileText, GraduationCap,
-  MessageSquare, Bell, CreditCard, Settings, LogOut, Menu, X, UserCog
+  MessageSquare, Bell, CreditCard, Settings, LogOut,
+  Menu, X, UserCog, Mail, ClipboardList
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import Logo from '@/components/Logo'
 
+// ── Role-based nav ────────────────────────────────────────────
+// roles: null = all staff | string[] = only those roles
 const adminNav = [
-  { href: '/admin',                label: 'Dashboard',    icon: LayoutDashboard },
-  { href: '/admin/students',       label: 'Students',     icon: Users },
-  { href: '/admin/applications',   label: 'Applications', icon: FileText },
-  { href: '/admin/documents',      label: 'Documents',    icon: FileText },
-  { href: '/admin/counseling',     label: 'Counseling',   icon: MessageSquare },
-  { href: '/admin/universities',   label: 'Universities', icon: GraduationCap },
-  { href: '/admin/payments',       label: 'Payments',     icon: CreditCard },
-  { href: '/admin/staff',          label: 'Staff',        icon: UserCog },
-  { href: '/admin/settings',       label: 'Settings',     icon: Settings },
+  { href: '/admin',              label: 'Dashboard',    icon: LayoutDashboard, roles: null },
+  { href: '/admin/students',     label: 'Students',     icon: Users,           roles: ['admin', 'counselor', 'admissions'] },
+  { href: '/admin/applications', label: 'Applications', icon: FileText,        roles: null },
+  { href: '/admin/admissions',   label: 'Admissions',   icon: ClipboardList,   roles: ['admin', 'admissions'] },
+  { href: '/admin/documents',    label: 'Documents',    icon: FileText,        roles: null },
+  { href: '/admin/counseling',   label: 'Counseling',   icon: MessageSquare,   roles: ['admin', 'counselor'] },
+  { href: '/admin/messages',     label: 'Messages',     icon: Mail,            roles: null },
+  { href: '/admin/universities', label: 'Universities', icon: GraduationCap,   roles: ['admin', 'admissions'] },
+  { href: '/admin/payments',     label: 'Payments',     icon: CreditCard,      roles: ['admin', 'admissions'] },
+  { href: '/admin/staff',        label: 'Staff',        icon: UserCog,         roles: ['admin'] },
+  { href: '/admin/settings',     label: 'Settings',     icon: Settings,        roles: null },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+        .then(({ data }) => { if (data) setUserRole(data.role) })
+    })
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
   }
+
+  // Filter nav by role
+  const visibleNav = adminNav.filter(item => {
+    if (!item.roles) return true
+    if (!userRole) return false
+    return item.roles.includes(userRole)
+  })
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -48,9 +73,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
 
+        {/* Role badge */}
+        {userRole && (
+          <div className="px-4 py-2 border-b border-brand-800">
+            <span className="text-xs font-medium text-brand-400 uppercase tracking-widest capitalize">
+              {userRole.replace('_', ' ')}
+            </span>
+          </div>
+        )}
+
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {adminNav.map(({ href, label, icon: Icon }) => (
+          {visibleNav.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href}
               className={clsx(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
@@ -87,7 +121,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="hidden lg:flex items-center gap-2 text-sm text-gray-400">
             <span className="font-semibold text-brand-800">Aldanex</span>
             <span>/</span>
-            <span>Admin Portal</span>
+            <span className="capitalize">{userRole?.replace('_', ' ') || 'Portal'}</span>
           </div>
           <div className="flex items-center gap-3 ml-auto">
             <Link href="/admin/notifications"
