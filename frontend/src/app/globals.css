@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+
+  /* ── Buttons ─────────────────────────────────────────── */
+  .btn-primary {
+    @apply bg-brand-600 text-white px-4 py-2 rounded-lg
+           hover:bg-brand-700 active:bg-brand-800
+           transition-all duration-150 font-medium text-sm
+           disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-sm hover:shadow-md;
+  }
+
+  .btn-accent {
+    @apply bg-accent-500 text-white px-4 py-2 rounded-lg
+           hover:bg-accent-600 active:bg-accent-700
+           transition-all duration-150 font-medium text-sm
+           disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-sm hover:shadow-md;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-lg
+           hover:bg-gray-50 hover:border-gray-300
+           transition-all duration-150 font-medium text-sm shadow-sm;
+  }
+
+  .btn-ghost {
+    @apply text-brand-600 px-4 py-2 rounded-lg
+           hover:bg-brand-50 transition-all duration-150 font-medium text-sm;
+  }
+
+  /* ── Cards ───────────────────────────────────────────── */
+  .card {
+    @apply bg-white rounded-xl border border-gray-100 p-6 shadow-card;
+  }
+
+  .card-hover {
+    @apply card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200 cursor-pointer;
+  }
+
+  /* ── Form elements ───────────────────────────────────── */
+  .input {
+    @apply w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm
+           bg-white text-gray-900 placeholder-gray-400
+           focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500
+           transition-colors duration-150;
+  }
+
+  .input:disabled {
+    @apply bg-gray-50 text-gray-500 cursor-not-allowed;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1.5;
+  }
+
+  /* ── Badges ──────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  /* ── Sidebar nav active state ────────────────────────── */
+  .nav-active {
+    @apply bg-brand-700 text-white;
+  }
+
+  .nav-inactive {
+    @apply text-brand-200 hover:bg-brand-800/60 hover:text-white;
+  }
+}
