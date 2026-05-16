@@ -4,7 +4,46 @@ const supabase = require('../lib/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { sendEmail, templates } = require('../lib/mailer');
 
-// GET /api/documents/:applicationId - list documents for an application
+const BUCKET = 'student-documents';
+const SIGNED_URL_EXPIRY = 60 * 60; // 1 hour in seconds
+
+/**
+ * Generate a signed URL for a file path.
+ * Handles both raw paths and legacy full URLs.
+ */
+async function getSignedUrl(filePath) {
+  if (!filePath) return null;
+
+  // Extract just the path if it's a full Supabase URL
+  // e.g. https://xxx.supabase.co/storage/v1/object/public/student-documents/documents/...
+  let path = filePath;
+  if (filePath.includes('/storage/v1/object/')) {
+    const match = filePath.match(/student-documents\/(.+)/);
+    if (match) {
+      path = match[1];
+    } else {
+      // Can't extract path — return original URL as fallback
+      return filePath;
+    }
+  }
+
+  try {
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(path, SIGNED_URL_EXPIRY);
+
+    if (error) {
+      console.error('Signed URL error for path:', path, '|', error.message);
+      return filePath; // return original as fallback
+    }
+    return data.signedUrl;
+  } catch (err) {
+    console.error('Signed URL exception:', err.message);
+    return filePath;
+  }
+}
+
+// GET /api/documents/:applicationId - list documents with fresh signed URLs
 router.get('/:applicationId', authenticate, async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -14,8 +53,16 @@ router.get('/:applicationId', authenticate, async (req, res) => {
       .order('category');
 
     if (error) throw error;
-    res.json(data);
+
+    // Generate signed URLs for all documents in parallel
+    const enriched = await Promise.all((data || []).map(async (doc) => {
+      const signedUrl = await getSignedUrl(doc.file_path || doc.file_url);
+      return { ...doc, file_url: signedUrl };
+    }));
+
+    res.json(enriched);
   } catch (err) {
+    console.error('GET /documents error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -32,13 +79,14 @@ router.post('/upload-url', authenticate, async (req, res) => {
     const filePath = `documents/${application_id}/${category}/${Date.now()}_${file_name}`;
 
     const { data, error } = await supabase.storage
-      .from('student-documents')
+      .from(BUCKET)
       .createSignedUploadUrl(filePath);
 
     if (error) throw error;
 
     res.json({ upload_url: data.signedUrl, file_path: filePath });
   } catch (err) {
+    console.error('POST /documents/upload-url error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -48,19 +96,18 @@ router.post('/', authenticate, async (req, res) => {
   try {
     const { application_id, category, document_name, file_path, file_type, file_size_kb, expiry_date } = req.body;
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('student-documents')
-      .getPublicUrl(file_path);
+    const studentId = req.user.profile?.id || req.user.id;
 
+    // Store the file_path (not a public URL) — signed URLs are generated on read
     const { data, error } = await supabase
       .from('documents')
       .insert({
         application_id,
-        student_id: req.user.profile.id,
+        student_id: studentId,
         category,
         document_name,
-        file_url: urlData.publicUrl,
+        file_url: file_path,   // store path, not public URL
+        file_path: file_path,  // also store in dedicated column
         file_type,
         file_size_kb,
         expiry_date,
@@ -71,6 +118,10 @@ router.post('/', authenticate, async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // Generate signed URL for the response
+    const signedUrl = await getSignedUrl(file_path);
+    const result = { ...data, file_url: signedUrl };
 
     // Notify counselor
     const { data: app } = await supabase
@@ -85,12 +136,13 @@ router.post('/', authenticate, async (req, res) => {
         type: 'action_required',
         title: 'New Document Uploaded',
         message: `A student has uploaded a new document: ${document_name}`,
-        link: `/admin/applications/${application_id}/documents`,
+        link: `/admin/documents`,
       });
     }
 
-    res.status(201).json(data);
+    res.status(201).json(result);
   } catch (err) {
+    console.error('POST /documents error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -105,11 +157,13 @@ router.patch('/:id/review', authenticate, requireRole('admin', 'counselor', 'adm
       return res.status(400).json({ error: 'Invalid status' });
     }
 
+    const reviewerId = req.user.profile?.id || req.user.id;
+
     const { data, error } = await supabase
       .from('documents')
       .update({
         status,
-        reviewer_id: req.user.profile.id,
+        reviewer_id: reviewerId,
         reviewer_notes,
         reviewed_at: new Date().toISOString(),
       })
@@ -121,9 +175,9 @@ router.patch('/:id/review', authenticate, requireRole('admin', 'counselor', 'adm
 
     // Notify student
     const notifMessages = {
-      approved: { type: 'success', title: 'Document Approved', msg: `Your document "${data.document_name}" has been approved.` },
-      rejected: { type: 'warning', title: 'Document Rejected', msg: `Your document "${data.document_name}" was rejected. ${reviewer_notes || ''}` },
-      resubmit_requested: { type: 'action_required', title: 'Document Resubmission Required', msg: `Please resubmit "${data.document_name}". ${reviewer_notes || ''}` },
+      approved:           { type: 'success',          title: 'Document Approved',              msg: `Your document "${data.document_name}" has been approved.` },
+      rejected:           { type: 'warning',          title: 'Document Rejected',              msg: `Your document "${data.document_name}" was rejected. ${reviewer_notes || ''}` },
+      resubmit_requested: { type: 'action_required',  title: 'Document Resubmission Required', msg: `Please resubmit "${data.document_name}". ${reviewer_notes || ''}` },
     };
 
     const notif = notifMessages[status];
@@ -135,7 +189,7 @@ router.patch('/:id/review', authenticate, requireRole('admin', 'counselor', 'adm
       link: '/dashboard/documents',
     });
 
-    // Send document review email
+    // Send email (non-blocking)
     try {
       const { data: student } = await supabase
         .from('profiles')
@@ -155,6 +209,7 @@ router.patch('/:id/review', authenticate, requireRole('admin', 'counselor', 'adm
 
     res.json(data);
   } catch (err) {
+    console.error('PATCH /documents/:id/review error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

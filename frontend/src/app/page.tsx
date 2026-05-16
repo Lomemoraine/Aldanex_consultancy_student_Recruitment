@@ -31,10 +31,10 @@ export default function HomePage() {
 
         <div className="max-w-6xl mx-auto relative">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 bg-accent-500/20 border border-accent-400/30 text-accent-300 text-xs font-medium px-3 py-1.5 rounded-full mb-6">
+            {/* <div className="inline-flex items-center gap-2 bg-accent-500/20 border border-accent-400/30 text-accent-300 text-xs font-medium px-3 py-1.5 rounded-full mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-accent-400 animate-pulse" />
               Student Recruitment & Admission Portal
-            </div>
+            </div> */}
             <h1 className="text-5xl sm:text-6xl font-bold text-white leading-tight mb-6">
               Transforming Education
               <span className="text-accent-400"> Through</span>
