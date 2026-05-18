@@ -4,7 +4,16 @@ const supabase = require('../lib/supabase');
 const { authenticate } = require('../middleware/auth');
 const { sendEmail, templates } = require('../lib/mailer');
 
-// POST /api/auth/register - student self-registration
+// ── Helper: generate 6-digit OTP ─────────────────────────────
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// ── In-memory OTP store (use Redis in production) ─────────────
+// Structure: { email: { otp, expiresAt, userData } }
+const otpStore = new Map();
+
+// POST /api/auth/register — Step 1: create unconfirmed user, send OTP
 router.post('/register', async (req, res) => {
   try {
     const { full_name, email, phone, nationality, preferred_study_destination, password } = req.body;
@@ -13,7 +22,83 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'full_name, email, and password are required' });
     }
 
-    // Create auth user with email already confirmed so they can log in immediately
+    // Check if email already exists
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      return res.status(400).json({ error: 'An account with this email already exists.' });
+    }
+
+    // Generate OTP
+    const otp = generateOTP();
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+    // Store OTP + user data temporarily
+    otpStore.set(email.toLowerCase(), {
+      otp,
+      expiresAt,
+      userData: { full_name, email, phone, nationality, preferred_study_destination, password },
+    });
+
+    // Send verification email (non-blocking — don't crash if email fails)
+    let emailSent = false;
+    try {
+      const { subject, html } = templates.verificationEmail(full_name, otp);
+      await sendEmail({ to: email, subject, html });
+      emailSent = true;
+    } catch (emailErr) {
+      console.error('Verification email failed:', emailErr.message);
+      // Still proceed — log the OTP to console so you can test manually
+      console.log(`[DEV] OTP for ${email}: ${otp}`);
+    }
+
+    res.status(200).json({
+      message: emailSent
+        ? 'Verification code sent to your email. Please check your inbox.'
+        : 'Account created. Email delivery failed — please contact support or check server logs.',
+      email,
+      // Only expose OTP in development when email fails
+      ...(process.env.NODE_ENV !== 'production' && !emailSent ? { dev_otp: otp } : {}),
+    });
+  } catch (err) {
+    console.error('Register error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/verify-otp — Step 2: verify OTP, create account
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and verification code are required.' });
+    }
+
+    const stored = otpStore.get(email.toLowerCase());
+
+    if (!stored) {
+      return res.status(400).json({ error: 'No verification code found. Please register again.' });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(email.toLowerCase());
+      return res.status(400).json({ error: 'Verification code has expired. Please register again.' });
+    }
+
+    if (stored.otp !== otp.trim()) {
+      return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
+    }
+
+    // OTP valid — create the account
+    const { full_name, phone, nationality, preferred_study_destination, password } = stored.userData;
+    otpStore.delete(email.toLowerCase());
+
+    // Create auth user (confirmed)
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -53,11 +138,11 @@ router.post('/register', async (req, res) => {
       user_id: authData.user.id,
       type: 'success',
       title: 'Welcome to Aldanex!',
-      message: `Welcome ${full_name}! Please complete your profile to get started.`,
+      message: `Welcome ${full_name}! Your account is verified. Please complete your profile to get started.`,
       link: '/dashboard/profile',
     });
 
-    // Welcome email (non-blocking)
+    // Send welcome email (non-blocking)
     try {
       const { subject, html } = templates.welcomeEmail(full_name, profile.student_id);
       await sendEmail({ to: email, subject, html });
@@ -66,9 +151,35 @@ router.post('/register', async (req, res) => {
     }
 
     res.status(201).json({
-      message: 'Registration successful. You can now sign in.',
+      message: 'Account verified successfully. You can now sign in.',
       student_id: profile.student_id,
     });
+  } catch (err) {
+    console.error('Verify OTP error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/resend-otp — resend verification code
+router.post('/resend-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const stored = otpStore.get(email?.toLowerCase());
+
+    if (!stored) {
+      return res.status(400).json({ error: 'No pending registration found. Please register again.' });
+    }
+
+    // Generate new OTP
+    const otp = generateOTP();
+    stored.otp = otp;
+    stored.expiresAt = Date.now() + 15 * 60 * 1000;
+    otpStore.set(email.toLowerCase(), stored);
+
+    const { subject, html } = templates.verificationEmail(stored.userData.full_name, otp);
+    await sendEmail({ to: email, subject, html });
+
+    res.json({ message: 'New verification code sent.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -3,6 +3,7 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { sendEmail, templates } = require('../lib/mailer');
+const { sendSMS, smsTemplates } = require('../lib/sms');
 
 const BUCKET = 'student-documents';
 const SIGNED_URL_EXPIRY = 60 * 60; // 1 hour in seconds
@@ -189,11 +190,11 @@ router.patch('/:id/review', authenticate, requireRole('admin', 'counselor', 'adm
       link: '/dashboard/documents',
     });
 
-    // Send email (non-blocking)
+    // Send email + SMS (non-blocking)
     try {
       const { data: student } = await supabase
         .from('profiles')
-        .select('full_name, email')
+        .select('full_name, email, phone')
         .eq('id', data.student_id)
         .single();
 
@@ -202,6 +203,18 @@ router.patch('/:id/review', authenticate, requireRole('admin', 'counselor', 'adm
           student.full_name, data.document_name, status, reviewer_notes
         );
         await sendEmail({ to: student.email, subject, html });
+
+        // SMS
+        if (student.phone) {
+          const firstName = student.full_name.split(' ')[0];
+          let smsBody;
+          if (status === 'approved') {
+            smsBody = smsTemplates.documentApproved(firstName, data.document_name);
+          } else if (status === 'rejected') {
+            smsBody = smsTemplates.documentRejected(firstName, data.document_name, reviewer_notes);
+          }
+          if (smsBody) sendSMS(student.phone, smsBody).catch(() => {});
+        }
       }
     } catch (emailErr) {
       console.error('Document review email failed:', emailErr.message);

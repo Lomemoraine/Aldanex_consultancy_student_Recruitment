@@ -20,6 +20,9 @@ export default function LoginPage() {
     if (searchParams.get('registered') === '1') {
       setSuccess('Account created successfully! You can now sign in.')
     }
+    if (searchParams.get('verified') === '1') {
+      setSuccess('✓ Email verified! Your account is ready. Sign in below.')
+    }
   }, [searchParams])
 
   async function handleLogin(e: React.FormEvent) {

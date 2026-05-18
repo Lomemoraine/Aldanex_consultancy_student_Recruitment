@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../lib/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { sendSMS, smsTemplates } = require('../lib/sms');
 
 // GET /api/visa/:applicationId
 router.get('/:applicationId', authenticate, async (req, res) => {
@@ -89,13 +90,33 @@ router.patch('/:id', authenticate, async (req, res) => {
 
     // Notify student on decision
     if (update.decision) {
+      const isApproved = update.decision === 'approved';
       await supabase.from('notifications').insert({
         user_id: data.student_id,
-        type: update.decision === 'approved' ? 'success' : 'warning',
-        title: `Visa ${update.decision === 'approved' ? 'Approved' : 'Decision Received'}`,
+        type: isApproved ? 'success' : 'warning',
+        title: `Visa ${isApproved ? 'Approved' : 'Decision Received'}`,
         message: `Your visa application decision: ${update.decision.toUpperCase()}`,
         link: '/dashboard/visa',
       });
+
+      // SMS for visa decision
+      try {
+        const { data: student } = await supabase
+          .from('profiles')
+          .select('full_name, phone')
+          .eq('id', data.student_id)
+          .single();
+
+        if (student?.phone && isApproved) {
+          const smsBody = smsTemplates.visaApproved(student.full_name.split(' ')[0]);
+          sendSMS(student.phone, smsBody).catch(() => {});
+        } else if (student?.phone && !isApproved) {
+          const smsBody = `Hi ${student.full_name.split(' ')[0]}, your visa application decision has been received: ${update.decision.toUpperCase()}. Log in for details: ${process.env.FRONTEND_URL}/dashboard/visa`;
+          sendSMS(student.phone, smsBody).catch(() => {});
+        }
+      } catch (smsErr) {
+        console.error('Visa SMS failed:', smsErr.message);
+      }
     }
 
     res.json(data);

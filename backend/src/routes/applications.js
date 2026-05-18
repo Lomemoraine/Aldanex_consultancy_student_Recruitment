@@ -3,6 +3,7 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { sendEmail, templates } = require('../lib/mailer');
+const { sendSMS, smsTemplates } = require('../lib/sms');
 
 // GET /api/applications - list applications (admin/counselor sees all, student sees own)
 router.get('/', authenticate, async (req, res) => {
@@ -97,21 +98,29 @@ router.patch('/:id/stage', authenticate, requireRole('admin', 'counselor', 'admi
       link: `/dashboard/application`,
     });
 
-    // Send stage update email
+    // Send stage update email + SMS
     try {
       const { data: student } = await supabase
         .from('profiles')
-        .select('full_name, email')
+        .select('full_name, email, phone')
         .eq('id', data.student_id)
         .single();
 
       if (student) {
         const stageLabel = stage.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+        // Email
         const { subject, html } = templates.stageUpdateEmail(student.full_name, stageLabel, notes);
         await sendEmail({ to: student.email, subject, html });
+
+        // SMS (non-blocking, only if phone number exists)
+        if (student.phone) {
+          const smsBody = smsTemplates.stageUpdate(student.full_name.split(' ')[0], stageLabel);
+          sendSMS(student.phone, smsBody).catch(() => {}); // fire and forget
+        }
       }
     } catch (emailErr) {
-      console.error('Stage update email failed:', emailErr.message);
+      console.error('Stage update notifications failed:', emailErr.message);
     }
 
     res.json(data);

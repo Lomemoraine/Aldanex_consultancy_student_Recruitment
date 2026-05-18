@@ -42,7 +42,7 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
+      const { data } = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
         full_name: form.full_name,
         email: form.email,
         phone: form.phone,
@@ -50,7 +50,13 @@ export default function RegisterPage() {
         preferred_study_destination: form.preferred_study_destination,
         password: form.password,
       })
-      router.push('/login?registered=1')
+
+      // In dev mode, if email failed, show the OTP directly
+      if (data.dev_otp) {
+        router.push(`/verify?email=${encodeURIComponent(form.email)}&dev_otp=${data.dev_otp}`)
+      } else {
+        router.push(`/verify?email=${encodeURIComponent(form.email)}`)
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Registration failed. Please try again.')
       setLoading(false)
