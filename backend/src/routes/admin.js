@@ -87,4 +87,42 @@ router.get('/staff', authenticate, requireRole('admin'), async (req, res) => {
   }
 });
 
+// DELETE /api/admin/staff/:id - remove a staff member
+router.delete('/staff/:id', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Prevent self-deletion
+    const requesterId = req.user.profile?.id || req.user.id;
+    if (id === requesterId) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
+    }
+
+    // Delete from auth (cascades to profiles via FK)
+    const { error } = await supabase.auth.admin.deleteUser(id);
+    if (error) throw error;
+
+    res.json({ message: 'Staff member removed successfully.' });
+  } catch (err) {
+    console.error('DELETE /admin/staff error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/students/:id - delete a student and all their data
+router.delete('/students/:id', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Delete from auth (cascades to profiles, applications, documents etc via FK)
+    const { error } = await supabase.auth.admin.deleteUser(id);
+    if (error) throw error;
+
+    res.json({ message: 'Student deleted successfully.' });
+  } catch (err) {
+    console.error('DELETE /admin/students error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

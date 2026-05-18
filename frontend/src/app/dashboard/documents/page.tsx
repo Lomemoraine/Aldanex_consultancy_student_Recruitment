@@ -196,6 +196,7 @@ export default function DocumentsPage() {
   const totalUploaded = allDocs.filter(d => d && d.status !== 'pending').length
   const totalApproved = allDocs.filter(d => d?.status === 'approved').length
   const overallPct = Math.round((totalUploaded / totalRequired) * 100)
+  const allUploaded = totalUploaded === totalRequired
 
   if (loading) {
     return (
@@ -262,6 +263,47 @@ export default function DocumentsPage() {
           </div>
         )}
       </div>
+
+      {/* All documents uploaded — review notification */}
+      {allUploaded && totalApproved < totalRequired && (
+        <div className="card bg-green-50 border border-green-200">
+          <div className="flex items-start gap-4">
+            <div className="p-2.5 bg-green-100 rounded-xl shrink-0">
+              <CheckCircle size={22} className="text-green-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-green-800 text-base">
+                All documents uploaded! 🎉
+              </h3>
+              <p className="text-green-700 text-sm mt-1 leading-relaxed">
+                Great work! Your documents have been submitted for review. Our team will carefully review each document and approve them within <strong>1–2 business days</strong>.
+              </p>
+              <p className="text-green-600 text-sm mt-2">
+                You will receive an <strong>email and SMS notification</strong> once each document is reviewed. You can continue to the next section once all documents are approved.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* All documents approved */}
+      {totalApproved === totalRequired && totalRequired > 0 && (
+        <div className="card bg-brand-50 border border-brand-200">
+          <div className="flex items-start gap-4">
+            <div className="p-2.5 bg-brand-100 rounded-xl shrink-0">
+              <CheckCircle size={22} className="text-brand-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-brand-800 text-base">
+                All documents approved! ✓
+              </h3>
+              <p className="text-brand-700 text-sm mt-1">
+                Excellent! All your documents have been verified. Your counselor will now proceed with your university applications.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Document categories */}
       {CATEGORIES.map(cat => {

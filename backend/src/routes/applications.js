@@ -151,6 +151,22 @@ router.patch('/:id/assign', authenticate, requireRole('admin'), async (req, res)
   }
 });
 
+// DELETE /api/applications/:id - delete an application
+router.delete('/:id', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('applications')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+    res.json({ message: 'Application deleted successfully.' });
+  } catch (err) {
+    console.error('DELETE /applications error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/applications/stats/overview - dashboard stats for admin
 router.get('/stats/overview', authenticate, requireRole('admin', 'counselor'), async (req, res) => {
   try {

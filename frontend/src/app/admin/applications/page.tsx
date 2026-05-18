@@ -5,7 +5,7 @@ import Link from 'next/link'
 import api from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { STAGES, STAGE_COLORS } from '@/lib/constants'
-import { Search, ChevronRight, RefreshCw } from 'lucide-react'
+import { Search, ChevronRight, RefreshCw, Trash2, X, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
 
 export default function ApplicationsPage() {
@@ -13,6 +13,9 @@ export default function ApplicationsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState('')
+  const [deleting, setDeleting] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<any>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => { load() }, [])
 
@@ -61,6 +64,19 @@ export default function ApplicationsPage() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleDelete(app: any) {
+    setDeleting(app.id)
+    setConfirmDelete(null)
+    try {
+      await api.delete(`/applications/${app.id}`)
+      setApplications(prev => prev.filter(a => a.id !== app.id))
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to delete application.')
+    } finally {
+      setDeleting('')
     }
   }
 

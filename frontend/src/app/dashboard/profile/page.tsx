@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import api from '@/lib/api'
-import { Save, User, BookOpen, Globe, Briefcase, CheckCircle } from 'lucide-react'
+import { Save, User, BookOpen, Globe, Briefcase, CheckCircle, ArrowRight } from 'lucide-react'
 
 const QUALIFICATION_LEVELS = ['High School', 'Diploma', 'Bachelor', 'Master', 'PhD', 'Other']
 const ENGLISH_TESTS = ['IELTS', 'TOEFL', 'PTE', 'Duolingo', 'Cambridge', 'None']
@@ -12,6 +13,7 @@ const DESTINATIONS = ['United Kingdom', 'United States', 'Canada', 'Australia', 
 const INTAKES = ['January', 'May', 'September', ]
 
 export default function ProfilePage() {
+  const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -145,26 +147,77 @@ export default function ProfilePage() {
         ...studentProfileFields
       } = form
 
-      // Update profiles table (name, phone, nationality, destination)
+      // Update profiles table
       await supabase
         .from('profiles')
         .update({ full_name, phone, nationality, preferred_study_destination })
         .eq('id', userId)
 
-      // Update student_profiles table (all other fields)
-      await api.put(`/students/${userId}/profile`, studentProfileFields)
+      // Update student_profiles table
+      const result = await api.put(`/students/${userId}/profile`, studentProfileFields)
 
-      // Refresh completion %
-      const { data: sp } = await supabase
-        .from('student_profiles')
-        .select('profile_completion_pct')
-        .eq('user_id', userId)
+      // Calculate completion locally based on filled key fields
+      const keyFields = [
+        'date_of_birth', 'gender', 'passport_number', 'highest_qualification',
+        'qualification_level', 'english_test_type', 'preferred_course',
+        'preferred_intake', 'budget_range', 'sponsorship_type'
+      ]
+      const filledCount = keyFields.filter(f => (studentProfileFields as any)[f]).length
+      const localPct = Math.round((filledCount / keyFields.length) * 100)
+
+      // Use backend completion % if available, otherwise use local calculation
+      const newPct = result?.data?.completion_pct ?? localPct
+      setCompletionPct(newPct)
+
+      // Re-fetch latest saved data so fields stay populated
+      const { data: p } = await supabase
+        .from('profiles')
+        .select('*, student_profile:student_profiles(*)')
+        .eq('id', userId)
         .single()
 
-      if (sp) setCompletionPct(sp.profile_completion_pct || 0)
+      if (p) {
+        const sp = p.student_profile || {}
+        // Update completion from DB if available
+        if (sp.profile_completion_pct !== undefined) {
+          setCompletionPct(sp.profile_completion_pct)
+        }
+        // Keep form in sync with saved data (don't clear fields)
+        setForm(prev => ({
+          ...prev,
+          full_name:                   p.full_name                   || prev.full_name,
+          phone:                       p.phone                       || prev.phone,
+          nationality:                 p.nationality                 || prev.nationality,
+          preferred_study_destination: p.preferred_study_destination || prev.preferred_study_destination,
+          date_of_birth:        sp.date_of_birth        || prev.date_of_birth,
+          gender:               sp.gender               || prev.gender,
+          address:              sp.address              || prev.address,
+          city:                 sp.city                 || prev.city,
+          country:              sp.country              || prev.country,
+          passport_number:      sp.passport_number      || prev.passport_number,
+          passport_expiry:      sp.passport_expiry      || prev.passport_expiry,
+          passport_country:     sp.passport_country     || prev.passport_country,
+          highest_qualification: sp.highest_qualification || prev.highest_qualification,
+          qualification_level:   sp.qualification_level   || prev.qualification_level,
+          institution_attended:  sp.institution_attended  || prev.institution_attended,
+          graduation_year:       sp.graduation_year       || prev.graduation_year,
+          gpa:                   sp.gpa                   || prev.gpa,
+          english_test_type:     sp.english_test_type     || prev.english_test_type,
+          english_test_score:    sp.english_test_score    || prev.english_test_score,
+          english_test_date:     sp.english_test_date     || prev.english_test_date,
+          preferred_course:      sp.preferred_course      || prev.preferred_course,
+          preferred_intake:      sp.preferred_intake      || prev.preferred_intake,
+          budget_range:          sp.budget_range          || prev.budget_range,
+          sponsorship_type:      sp.sponsorship_type      || prev.sponsorship_type,
+          employment_background: sp.employment_background || prev.employment_background,
+        }))
+      }
 
       setSaved(true)
-      setTimeout(() => setSaved(false), 4000)
+      // Redirect to documents after brief success flash
+      setTimeout(() => {
+        router.push('/dashboard/documents')
+      }, 1200)
     } catch (err: any) {
       setSaveError('Failed to save. Please try again.')
       console.error('Save failed:', err)
@@ -196,12 +249,21 @@ export default function ProfilePage() {
         <div className="card py-3 px-4 min-w-[200px]">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
             <span>Profile Completion</span>
-            <span className="font-semibold text-brand-600">{completionPct}%</span>
+            <span className={`font-semibold ${completionPct === 100 ? 'text-green-600' : 'text-brand-600'}`}>
+              {completionPct}%
+            </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div className="bg-brand-600 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${completionPct}%` }} />
+            <div
+              className={`h-2 rounded-full transition-all duration-500 ${completionPct === 100 ? 'bg-green-500' : 'bg-brand-600'}`}
+              style={{ width: `${completionPct}%` }}
+            />
           </div>
+          {completionPct === 100 && (
+            <p className="text-xs text-green-600 font-medium mt-1 flex items-center gap-1">
+              <CheckCircle size={11} /> Profile complete
+            </p>
+          )}
         </div>
       </div>
 
@@ -473,7 +535,8 @@ export default function ProfilePage() {
           </button>
           {saved && (
             <span className="flex items-center gap-1.5 text-green-600 text-sm font-medium">
-              <CheckCircle size={16} /> Profile saved successfully
+              <CheckCircle size={16} /> Saved! Redirecting to documents...
+              <ArrowRight size={14} className="animate-pulse" />
             </span>
           )}
           {saveError && (

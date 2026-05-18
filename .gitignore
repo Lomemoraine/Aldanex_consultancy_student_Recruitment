@@ -38,3 +38,4 @@ desktop.ini
 # ── Planning documents (internal only) ───────────────────────
 *.docx
 *.doc
+backend/src/routes/setup.js

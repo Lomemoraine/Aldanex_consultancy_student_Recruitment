@@ -267,7 +267,7 @@ export default function StudentDashboard() {
         </Link>
       </div>
 
-      {/* Next steps prompt */}
+      {/* Next steps prompt — only show during profile stages */}
       {(application?.current_stage === 'registered' || application?.current_stage === 'profile_completion') && (
         <div className="card bg-brand-50 border border-brand-200">
           <div className="flex items-start gap-4">

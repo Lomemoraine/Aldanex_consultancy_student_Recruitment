@@ -3,9 +3,38 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 
 /**
+ * POST /api/setup/test-sms — verify Twilio is working (dev only)
+ */
+router.post('/test-sms', async (req, res) => {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Not available in production' });
+    }
+    const { phone, setup_key } = req.body;
+    if (setup_key !== process.env.SETUP_KEY) {
+      return res.status(403).json({ error: 'Invalid setup key' });
+    }
+    if (!phone) {
+      return res.status(400).json({ error: 'phone is required (E.164 format e.g. +254712345678)' });
+    }
+    const { sendSMS } = require('../lib/sms');
+    const result = await sendSMS(
+      phone,
+      `Aldanex SMS test ✓ — notifications are working! ${new Date().toLocaleTimeString()}`
+    );
+    if (result) {
+      res.json({ success: true, sid: result.sid, message: `SMS sent to ${phone}` });
+    } else {
+      res.json({ success: false, message: 'SMS skipped — check TWILIO_* env vars or phone number format' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/setup/admin
  * One-time route to create the first admin account.
- * Disable this route after first use in production.
  */
 router.post('/admin', async (req, res) => {
   try {
