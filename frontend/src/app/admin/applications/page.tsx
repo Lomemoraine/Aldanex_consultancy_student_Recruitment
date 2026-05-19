@@ -26,7 +26,7 @@ export default function ApplicationsPage() {
       const apps = appsRes.data || []
 
       // Fetch student profiles for all applications
-      const studentIds = [...new Set(apps.map((a: any) => a.student_id))]
+      const studentIds = Array.from(new Set(apps.map((a: any) => a.student_id)))
       let studentMap: Record<string, any> = {}
 
       if (studentIds.length > 0) {
@@ -39,9 +39,9 @@ export default function ApplicationsPage() {
       }
 
       // Fetch counselor profiles
-      const counselorIds = [...new Set(
+      const counselorIds = Array.from(new Set(
         apps.filter((a: any) => a.assigned_counselor_id).map((a: any) => a.assigned_counselor_id)
-      )]
+      ))
       let counselorMap: Record<string, any> = {}
 
       if (counselorIds.length > 0) {
@@ -92,6 +92,50 @@ export default function ApplicationsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Confirm delete modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Delete Application</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-2">
+              You are about to permanently delete the application for:
+            </p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-5">
+              <p className="font-semibold text-red-800">{confirmDelete.student?.full_name || 'Unknown Student'}</p>
+              <p className="text-xs text-red-600">
+                ID: {confirmDelete.student?.student_id || '—'} · Stage: {confirmDelete.current_stage?.replace(/_/g, ' ').toUpperCase()}
+              </p>
+            </div>
+            <p className="text-xs text-gray-500 mb-5">
+              This will delete all documents, session records, university applications, offers, deposit proofs, and visa details associated with this application.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleDelete(confirmDelete)}
+                disabled={deleting === confirmDelete.id}
+                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deleting === confirmDelete.id ? 'Deleting...' : 'Yes, Delete Application'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Applications</h1>
@@ -101,6 +145,13 @@ export default function ApplicationsPage() {
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg flex items-center justify-between">
+          {error}
+          <button onClick={() => setError('')}><X size={14} /></button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -127,7 +178,7 @@ export default function ApplicationsPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Stage</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Counselor</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
-                <th className="px-4 py-3" />
+                <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -159,10 +210,20 @@ export default function ApplicationsPage() {
                     {new Date(app.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={`/admin/applications/${app.id}`}
-                      className="text-brand-600 hover:text-brand-700">
-                      <ChevronRight size={16} />
-                    </Link>
+                    <div className="flex items-center justify-end gap-2">
+                      <Link href={`/admin/applications/${app.id}`}
+                        className="text-brand-600 hover:text-brand-700 p-1.5 rounded-lg hover:bg-brand-50">
+                        <ChevronRight size={16} />
+                      </Link>
+                      <button
+                        onClick={() => setConfirmDelete(app)}
+                        disabled={deleting === app.id}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Delete application"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

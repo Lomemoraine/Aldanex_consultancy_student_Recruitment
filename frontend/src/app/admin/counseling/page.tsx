@@ -32,7 +32,7 @@ export default function AdminCounselingPage() {
   async function load() {
     setLoading(true)
     try {
-      const appsRes = await api.get('/applications')
+      const appsRes = await api.get('/applications/with-students')
       const apps = appsRes.data || []
       setApplications(apps)
 

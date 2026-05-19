@@ -227,4 +227,51 @@ router.patch('/:id/review', authenticate, requireRole('admin', 'counselor', 'adm
   }
 });
 
+// DELETE /api/documents/:id - delete a document (admin only)
+router.delete('/:id', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch doc to get the file_path
+    const { data: doc, error: fetchError } = await supabase
+      .from('documents')
+      .select('file_path')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      // If it doesn't exist, we can return success or 404. Let's return 404 if not found.
+      if (fetchError.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+      throw fetchError;
+    }
+
+    if (doc?.file_path) {
+      // Delete from Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from(BUCKET)
+        .remove([doc.file_path]);
+      
+      if (storageError) {
+        console.error('Storage deletion failed:', storageError.message);
+      }
+    }
+
+    // Delete from database
+    const { error: dbError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', id);
+
+    if (dbError) throw dbError;
+
+    res.json({ message: 'Document deleted successfully.' });
+  } catch (err) {
+    console.error('DELETE /documents error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
+

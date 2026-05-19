@@ -8,8 +8,44 @@ router.get('/', authenticate, requireRole('admin', 'counselor', 'admissions'), a
   try {
     const { page = 1, limit = 50, search } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
+    const { profile } = req.user;
 
-    // Simple query — no joins to avoid RLS issues
+    // Counselors only see students assigned to them
+    if (profile.role === 'counselor') {
+      // Get applications assigned to this counselor
+      let appQuery = supabase
+        .from('applications')
+        .select('student_id', { count: 'exact' })
+        .eq('assigned_counselor_id', profile.id);
+
+      const { data: apps, error: appError } = await appQuery;
+      if (appError) throw appError;
+
+      const studentIds = apps.map(app => app.student_id);
+
+      if (studentIds.length === 0) {
+        return res.json({ data: [], total: 0, page: Number(page), limit: Number(limit) });
+      }
+
+      // Fetch student profiles for assigned students
+      let query = supabase
+        .from('profiles')
+        .select('id, full_name, email, student_id, nationality, preferred_study_destination, phone, created_at', { count: 'exact' })
+        .in('id', studentIds)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + Number(limit) - 1);
+
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,student_id.ilike.%${search}%`);
+      }
+
+      const { data, error, count } = await query;
+      if (error) throw error;
+
+      return res.json({ data: data || [], total: count || 0, page: Number(page), limit: Number(limit) });
+    }
+
+    // Admin and admissions see all students
     let query = supabase
       .from('profiles')
       .select('id, full_name, email, student_id, nationality, preferred_study_destination, phone, created_at', { count: 'exact' })

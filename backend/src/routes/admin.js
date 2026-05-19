@@ -98,7 +98,19 @@ router.delete('/staff/:id', authenticate, requireRole('admin'), async (req, res)
       return res.status(400).json({ error: 'You cannot delete your own account.' });
     }
 
-    // Delete from auth (cascades to profiles via FK)
+    // 1. Nullify references on other tables to prevent foreign key errors
+    await supabase.from('applications').update({ assigned_counselor_id: null }).eq('assigned_counselor_id', id);
+    await supabase.from('applications').update({ assigned_admissions_id: null }).eq('assigned_admissions_id', id);
+    await supabase.from('visa_applications').update({ visa_officer_id: null }).eq('visa_officer_id', id);
+    await supabase.from('documents').update({ reviewer_id: null }).eq('reviewer_id', id);
+    await supabase.from('tuition_deposits').update({ verified_by: null }).eq('verified_by', id);
+    await supabase.from('enrollment_confirmations').update({ confirmed_by: null }).eq('confirmed_by', id);
+
+    // 2. Delete messages and counseling sessions related to this staff member
+    await supabase.from('messages').delete().or(`sender_id.eq.${id},recipient_id.eq.${id}`);
+    await supabase.from('counseling_sessions').delete().eq('counselor_id', id);
+
+    // 3. Delete from auth (cascades to profiles via FK)
     const { error } = await supabase.auth.admin.deleteUser(id);
     if (error) throw error;
 
@@ -114,7 +126,106 @@ router.delete('/students/:id', authenticate, requireRole('admin'), async (req, r
   try {
     const { id } = req.params;
 
-    // Delete from auth (cascades to profiles, applications, documents etc via FK)
+    // 1. Fetch student documents to delete their files from Supabase Storage
+    const { data: docs, error: docError } = await supabase
+      .from('documents')
+      .select('file_path')
+      .eq('student_id', id);
+
+    if (docError) {
+      console.error('Error fetching student documents for cleanup:', docError.message);
+    } else if (docs && docs.length > 0) {
+      const filePaths = docs.map(d => d.file_path).filter(Boolean);
+      if (filePaths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from('student-documents')
+          .remove(filePaths);
+        if (storageError) {
+          console.error('Failed to clean up student files from storage:', storageError.message);
+        }
+      }
+    }
+
+    // 2. Delete non-cascading student relationships to prevent foreign key errors
+    
+    // Nullify changed_by in application stage history to prevent constraint blocks
+    const { error: histError } = await supabase
+      .from('application_stage_history')
+      .update({ changed_by: null })
+      .eq('changed_by', id);
+    if (histError) console.error('Error cleaning student stage history references:', histError.message);
+
+    // counseling_sessions
+    const { error: sessionError } = await supabase
+      .from('counseling_sessions')
+      .delete()
+      .eq('student_id', id);
+    if (sessionError) console.error('Error cleaning student counseling sessions:', sessionError.message);
+
+    // offer_letters
+    const { error: offerError } = await supabase
+      .from('offer_letters')
+      .delete()
+      .eq('student_id', id);
+    if (offerError) console.error('Error cleaning student offer letters:', offerError.message);
+
+    // university_applications
+    const { error: uniError } = await supabase
+      .from('university_applications')
+      .delete()
+      .eq('student_id', id);
+    if (uniError) console.error('Error cleaning student university applications:', uniError.message);
+
+    // tuition_deposits
+    const { error: depositError } = await supabase
+      .from('tuition_deposits')
+      .delete()
+      .eq('student_id', id);
+    if (depositError) console.error('Error cleaning student tuition deposits:', depositError.message);
+
+    // visa_applications
+    const { error: visaError } = await supabase
+      .from('visa_applications')
+      .delete()
+      .eq('student_id', id);
+    if (visaError) console.error('Error cleaning student visa applications:', visaError.message);
+
+    // pre_departure
+    const { error: prepError } = await supabase
+      .from('pre_departure')
+      .delete()
+      .eq('student_id', id);
+    if (prepError) console.error('Error cleaning student pre-departure info:', prepError.message);
+
+    // enrollment_confirmations
+    const { error: enrollError } = await supabase
+      .from('enrollment_confirmations')
+      .delete()
+      .eq('student_id', id);
+    if (enrollError) console.error('Error cleaning student enrollment confirmations:', enrollError.message);
+
+    // payments
+    const { error: payError } = await supabase
+      .from('payments')
+      .delete()
+      .eq('student_id', id);
+    if (payError) console.error('Error cleaning student payments:', payError.message);
+
+    // messages
+    const { error: msgError } = await supabase
+      .from('messages')
+      .delete()
+      .or(`sender_id.eq.${id},recipient_id.eq.${id}`);
+    if (msgError) console.error('Error cleaning student messages:', msgError.message);
+
+    // notifications
+    const { error: notifError } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('user_id', id);
+    if (notifError) console.error('Error cleaning student notifications:', notifError.message);
+
+    // 3. Delete from auth (cascades to profiles, applications, documents, student_profiles etc. via FK)
     const { error } = await supabase.auth.admin.deleteUser(id);
     if (error) throw error;
 

@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import api from '@/lib/api'
 import {
   CheckCircle, XCircle, Clock, AlertCircle, Eye,
-  RefreshCw, Search, FileText, User, ChevronRight
+  RefreshCw, Search, FileText, User, ChevronRight, Trash2, AlertTriangle
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -39,8 +39,51 @@ export default function AdminDocumentsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [reviewing, setReviewing] = useState('')
   const [notes, setNotes] = useState<Record<string, string>>({})
+  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<any | null>(null)
+  const [deletingDocId, setDeletingDocId] = useState<string>('')
 
   useEffect(() => { loadStudents() }, [])
+
+  async function handleDeleteDoc(doc: any) {
+    setDeletingDocId(doc.id)
+    setConfirmDeleteDoc(null)
+    try {
+      await api.delete(`/documents/${doc.id}`)
+      
+      // Update documents locally for instant feedback
+      setDocuments(prev => {
+        const nextDocs = prev.filter(d => d.id !== doc.id)
+        
+        // Update student row counts in left panel
+        setStudents(prevStudents => prevStudents.map(s => {
+          if (s.studentId !== selected?.studentId) return s
+          return {
+            ...s,
+            totalDocs: nextDocs.length,
+            approvedDocs: nextDocs.filter(d => d.status === 'approved').length,
+            pendingReview: nextDocs.filter(d => d.status === 'uploaded' || d.status === 'under_review').length,
+          }
+        }))
+        
+        // Update currently selected student panel counts
+        setSelected(prevSelected => {
+          if (!prevSelected) return null
+          return {
+            ...prevSelected,
+            totalDocs: nextDocs.length,
+            approvedDocs: nextDocs.filter(d => d.status === 'approved').length,
+            pendingReview: nextDocs.filter(d => d.status === 'uploaded' || d.status === 'under_review').length,
+          }
+        })
+
+        return nextDocs
+      })
+    } catch (err) {
+      console.error('Delete document failed:', err)
+    } finally {
+      setDeletingDocId('')
+    }
+  }
 
   async function loadStudents() {
     setLoadingStudents(true)
@@ -49,7 +92,7 @@ export default function AdminDocumentsPage() {
       const apps = appsRes.data || []
       if (apps.length === 0) { setStudents([]); setLoadingStudents(false); return }
 
-      const studentIds = [...new Set(apps.map((a: any) => a.student_id))] as string[]
+      const studentIds = Array.from(new Set(apps.map((a: any) => a.student_id))) as string[]
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, full_name, email, student_id')
@@ -149,6 +192,48 @@ export default function AdminDocumentsPage() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] -m-6 overflow-hidden">
+
+      {/* Confirm delete document modal */}
+      {confirmDeleteDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Delete Document</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-2">
+              You are about to permanently delete this document:
+            </p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-5">
+              <p className="font-semibold text-red-800">{confirmDeleteDoc.document_name}</p>
+              <p className="text-xs text-red-600">Category: {confirmDeleteDoc.category?.replace(/_/g, ' ').toUpperCase()}</p>
+            </div>
+            <p className="text-xs text-gray-500 mb-5">
+              This will delete the document file from Supabase storage and remove all associated review status logs.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleDeleteDoc(confirmDeleteDoc)}
+                disabled={deletingDocId === confirmDeleteDoc.id}
+                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deletingDocId === confirmDeleteDoc.id ? 'Deleting...' : 'Yes, Delete Document'}
+              </button>
+              <button
+                onClick={() => setConfirmDeleteDoc(null)}
+                className="flex-1 btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── LEFT: Student list ── */}
       <div className={clsx(
@@ -375,7 +460,7 @@ export default function AdminDocumentsPage() {
                         </div>
 
                         {/* Action row */}
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap w-full">
 
                           {/* View */}
                           {doc.file_url && (
@@ -388,6 +473,16 @@ export default function AdminDocumentsPage() {
                               <Eye size={13} /> View Document
                             </a>
                           )}
+
+                          {/* Delete Document */}
+                          <button
+                            onClick={() => setConfirmDeleteDoc(doc)}
+                            disabled={deletingDocId === doc.id}
+                            className="flex items-center gap-1.5 text-xs text-red-600 hover:text-red-700 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-50 transition-colors font-medium sm:ml-auto"
+                            title="Delete document"
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
 
                           {/* Review actions */}
                           {canReview && (

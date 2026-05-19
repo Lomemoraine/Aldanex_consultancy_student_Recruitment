@@ -85,7 +85,7 @@ export default function AdminMessagesPage() {
           .select('application_id')
           .eq('recipient_id', session.user.id)
 
-        const msgAppIds = [...new Set((msgApps || []).map((m: any) => m.application_id))]
+        const msgAppIds = Array.from(new Set((msgApps || []).map((m: any) => m.application_id)))
 
         // Also get assigned application IDs
         const { data: assignedApps } = await supabase
@@ -96,7 +96,7 @@ export default function AdminMessagesPage() {
         const assignedIds = (assignedApps || []).map((a: any) => a.id)
 
         // Union of both sets
-        const allAppIds = [...new Set([...assignedIds, ...msgAppIds])]
+        const allAppIds = Array.from(new Set([...assignedIds, ...msgAppIds]))
 
         if (allAppIds.length === 0) {
           setConversations([])
@@ -118,7 +118,7 @@ export default function AdminMessagesPage() {
       }
 
       const appIds = apps.map((a: any) => a.id)
-      const studentIds = [...new Set(apps.map((a: any) => a.student_id))]
+      const studentIds = Array.from(new Set(apps.map((a: any) => a.student_id)))
 
       // Get student profiles
       const { data: students } = await supabase

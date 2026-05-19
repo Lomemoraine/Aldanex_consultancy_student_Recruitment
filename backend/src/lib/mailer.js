@@ -304,6 +304,58 @@ function sessionScheduledEmail(studentName, sessionType, platform, scheduledAt, 
   };
 }
 
+function counselorAssignedEmail(counselorName, studentName, studentId, applicationId) {
+  const firstName = counselorName.split(' ')[0];
+  const applicationUrl = `${process.env.FRONTEND_URL}/admin/applications/${applicationId}`;
+
+  return {
+    subject: `New Student Assigned: ${studentName}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1d4ed8;padding:32px;text-align:center;">
+          <h1 style="color:white;margin:0;">Aldanex Global Consult</h1>
+        </div>
+        <div style="padding:32px;background:#f9fafb;">
+          <h2>New Student Assignment 👤</h2>
+          <p>Dear ${firstName},</p>
+          <p>You have been assigned as the counselor for a new student:</p>
+          <div style="background:white;border:2px solid #e5e7eb;border-radius:12px;padding:24px;margin:20px 0;">
+            <table style="width:100%;border-collapse:collapse;">
+              <tr>
+                <td style="padding:8px;color:#6b7280;font-size:13px;">Student Name</td>
+                <td style="padding:8px;font-weight:bold;font-size:15px;color:#111827;">${studentName}</td>
+              </tr>
+              <tr style="background:#f9fafb;">
+                <td style="padding:8px;color:#6b7280;font-size:13px;">Student ID</td>
+                <td style="padding:8px;font-weight:bold;font-size:15px;color:#1d4ed8;">${studentId}</td>
+              </tr>
+            </table>
+          </div>
+          <div style="background:#dbeafe;border-left:4px solid #1d4ed8;padding:16px;margin:16px 0;border-radius:4px;">
+            <p style="margin:0;color:#1e3d8f;font-size:14px;">
+              <strong>Next Steps:</strong><br>
+              • Review the student's profile and application details<br>
+              • Check uploaded documents for completeness<br>
+              • Schedule an initial counseling session<br>
+              • Begin university selection and application planning
+            </p>
+          </div>
+          <a href="${applicationUrl}" 
+             style="display:inline-block;background:#1d4ed8;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;margin-top:16px;font-weight:bold;">
+            View Student Application →
+          </a>
+          <p style="color:#6b7280;font-size:12px;margin:16px 0 0;">
+            Or copy this link: <span style="color:#1d4ed8;">${applicationUrl}</span>
+          </p>
+        </div>
+        <div style="padding:16px;text-align:center;color:#6b7280;font-size:12px;">
+          © ${new Date().getFullYear()} Aldanex Global Consult. All rights reserved.
+        </div>
+      </div>
+    `,
+  };
+}
+
 module.exports = {
   sendEmail,
   templates: {
@@ -312,5 +364,6 @@ module.exports = {
     stageUpdateEmail,
     documentReviewEmail,
     sessionScheduledEmail,
+    counselorAssignedEmail,
   },
 };

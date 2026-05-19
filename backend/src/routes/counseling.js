@@ -32,6 +32,25 @@ router.post('/', authenticate, requireRole('admin', 'counselor'), async (req, re
       platform, meeting_link, scheduled_at, duration_minutes
     } = req.body;
 
+    const { profile } = req.user;
+
+    // If counselor, verify they are assigned to this student
+    if (profile.role === 'counselor') {
+      const { data: application, error: appError } = await supabase
+        .from('applications')
+        .select('assigned_counselor_id')
+        .eq('id', application_id)
+        .single();
+
+      if (appError) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      if (application.assigned_counselor_id !== profile.id) {
+        return res.status(403).json({ error: 'You are not assigned to this student' });
+      }
+    }
+
     const { data, error } = await supabase
       .from('counseling_sessions')
       .insert({
