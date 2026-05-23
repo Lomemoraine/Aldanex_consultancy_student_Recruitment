@@ -70,6 +70,10 @@ const smsTemplates = {
     return `Hi ${studentName}, your document "${docName}" was rejected.${noteText} Please re-upload: ${process.env.FRONTEND_URL}/dashboard/documents`;
   },
 
+  allDocumentsApproved(studentName) {
+    return `Congratulations ${studentName}! All your documents have been approved by Aldanex. You can now browse universities and start applying: ${process.env.FRONTEND_URL}/dashboard/universities`;
+  },
+
   offerReceived(studentName, universityName, outcome) {
     const outcomeText = outcome === 'unconditional' ? 'Congratulations! Unconditional offer' :
                         outcome === 'conditional'   ? 'Conditional offer' :

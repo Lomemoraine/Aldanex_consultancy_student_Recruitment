@@ -199,21 +199,46 @@ router.patch('/:id/review', authenticate, requireRole('admin', 'counselor', 'adm
         .single();
 
       if (student) {
-        const { subject, html } = templates.documentReviewEmail(
-          student.full_name, data.document_name, status, reviewer_notes
-        );
-        await sendEmail({ to: student.email, subject, html });
+        // For approved documents, check if ALL documents are now approved
+        if (status === 'approved') {
+          // Get all documents for this application
+          const { data: allDocs } = await supabase
+            .from('documents')
+            .select('id, status')
+            .eq('application_id', data.application_id);
 
-        // SMS
-        if (student.phone) {
-          const firstName = student.full_name.split(' ')[0];
-          let smsBody;
-          if (status === 'approved') {
-            smsBody = smsTemplates.documentApproved(firstName, data.document_name);
-          } else if (status === 'rejected') {
-            smsBody = smsTemplates.documentRejected(firstName, data.document_name, reviewer_notes);
+          const totalDocs = allDocs?.length || 0;
+          const approvedDocs = allDocs?.filter(d => d.status === 'approved').length || 0;
+
+          // Only send email if ALL documents are approved
+          if (totalDocs > 0 && approvedDocs === totalDocs) {
+            const { subject, html } = templates.allDocumentsApprovedEmail(student.full_name, totalDocs);
+            await sendEmail({ to: student.email, subject, html });
+
+            // SMS for all documents approved
+            if (student.phone) {
+              const firstName = student.full_name.split(' ')[0];
+              const smsBody = smsTemplates.allDocumentsApproved(firstName);
+              sendSMS(student.phone, smsBody).catch(() => {});
+            }
           }
-          if (smsBody) sendSMS(student.phone, smsBody).catch(() => {});
+          // If not all approved yet, don't send email (only in-app notification)
+        } else {
+          // For rejected or resubmit_requested, send email immediately
+          const { subject, html } = templates.documentReviewEmail(
+            student.full_name, data.document_name, status, reviewer_notes
+          );
+          await sendEmail({ to: student.email, subject, html });
+
+          // SMS
+          if (student.phone) {
+            const firstName = student.full_name.split(' ')[0];
+            let smsBody;
+            if (status === 'rejected') {
+              smsBody = smsTemplates.documentRejected(firstName, data.document_name, reviewer_notes);
+            }
+            if (smsBody) sendSMS(student.phone, smsBody).catch(() => {});
+          }
         }
       }
     } catch (emailErr) {
@@ -270,6 +295,77 @@ router.delete('/:id', authenticate, requireRole('admin'), async (req, res) => {
   } catch (err) {
     console.error('DELETE /documents error:', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/documents/:id/download - secure download endpoint
+router.get('/:id/download', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.profile?.id || req.user.id;
+
+    // Fetch document and verify ownership
+    const { data: doc, error: fetchError } = await supabase
+      .from('documents')
+      .select('*, applications!inner(student_id)')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !doc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // Security check: Only allow student to download their own documents
+    // OR allow staff (admin, counselor, etc.) to download any document
+    const isOwner = doc.applications.student_id === userId;
+    const isStaff = ['admin', 'counselor', 'admissions', 'visa_officer'].includes(req.user.profile?.role);
+
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Download file from Supabase Storage
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from(BUCKET)
+      .download(doc.file_path);
+
+    if (downloadError) {
+      console.error('Download error:', downloadError);
+      return res.status(500).json({ error: 'Failed to download file' });
+    }
+
+    // Extract filename from path (preserves original filename with extension)
+    const filename = doc.file_path.split('/').pop();
+    
+    // Determine content type - use stored file_type or infer from extension
+    let contentType = doc.file_type || 'application/octet-stream';
+    
+    // If no file_type stored, infer from filename extension
+    if (!doc.file_type && filename) {
+      const ext = filename.split('.').pop()?.toLowerCase();
+      const mimeTypes = {
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
+      contentType = mimeTypes[ext] || 'application/octet-stream';
+    }
+
+    // Set headers to force download with correct content type
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+
+    // Convert blob to buffer and send
+    const buffer = Buffer.from(await fileData.arrayBuffer());
+    res.send(buffer);
+
+  } catch (err) {
+    console.error('GET /documents/:id/download error:', err.message);
+    res.status(500).json({ error: 'Failed to download document' });
   }
 });
 

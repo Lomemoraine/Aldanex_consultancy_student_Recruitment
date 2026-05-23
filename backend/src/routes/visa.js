@@ -21,7 +21,7 @@ router.get('/:applicationId', authenticate, async (req, res) => {
 });
 
 // POST /api/visa - create visa application
-router.post('/', authenticate, requireRole('admin', 'visa_officer', 'admissions'), async (req, res) => {
+router.post('/', authenticate, requireRole('admin', 'visa_officer', 'admissions', 'counselor'), async (req, res) => {
   try {
     const { application_id, student_id, visa_type, destination_country } = req.body;
 

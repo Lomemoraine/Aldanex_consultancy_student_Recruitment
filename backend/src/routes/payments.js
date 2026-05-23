@@ -3,6 +3,43 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { authenticate, requireRole } = require('../middleware/auth');
 
+const BUCKET = 'student-documents';
+const SIGNED_URL_EXPIRY = 60 * 60; // 1 hour in seconds
+
+/**
+ * Generate a signed URL for a file path.
+ * Handles both raw paths and legacy full URLs.
+ */
+async function getSignedUrl(filePath) {
+  if (!filePath) return null;
+
+  // Extract just the path if it's a full Supabase URL
+  let path = filePath;
+  if (filePath.includes('/storage/v1/object/')) {
+    const match = filePath.match(/student-documents\/(.+)/);
+    if (match) {
+      path = match[1];
+    } else {
+      return filePath;
+    }
+  }
+
+  try {
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(path, SIGNED_URL_EXPIRY);
+
+    if (error) {
+      console.error('Signed URL error for path:', path, '|', error.message);
+      return filePath;
+    }
+    return data.signedUrl;
+  } catch (err) {
+    console.error('Signed URL exception:', err.message);
+    return filePath;
+  }
+}
+
 // GET /api/payments/:applicationId
 router.get('/:applicationId', authenticate, async (req, res) => {
   try {
@@ -13,7 +50,17 @@ router.get('/:applicationId', authenticate, async (req, res) => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    res.json(data);
+
+    // Generate signed URLs for receipts (for admin viewing)
+    const enriched = await Promise.all((data || []).map(async (payment) => {
+      if (payment.receipt_url) {
+        const signedUrl = await getSignedUrl(payment.receipt_url);
+        return { ...payment, receipt_url: signedUrl };
+      }
+      return payment;
+    }));
+
+    res.json(enriched);
   } catch (err) {
     console.error('GET /payments error:', err.message);
     res.status(500).json({ error: err.message });
@@ -180,6 +227,88 @@ router.patch('/:id/verify', authenticate, requireRole('admin', 'admissions'), as
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/payments/:id/receipt/download - secure receipt download
+router.get('/:id/receipt/download', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.profile?.id || req.user.id;
+
+    // Fetch payment record
+    const { data: payment, error: fetchError } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    if (!payment.receipt_url) {
+      return res.status(404).json({ error: 'No receipt available for this payment' });
+    }
+
+    // Security check: Only allow student to download their own receipts
+    // OR allow staff (admin, counselor, etc.) to download any receipt
+    const isOwner = payment.student_id === userId;
+    const isStaff = ['admin', 'counselor', 'admissions', 'visa_officer'].includes(req.user.profile?.role);
+
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Extract file path from receipt_url (handle both legacy URLs and paths)
+    let filePath = payment.receipt_url;
+    if (filePath.includes('/storage/v1/object/')) {
+      const match = filePath.match(/student-documents\/(.+)/);
+      if (match) {
+        filePath = match[1];
+      }
+    }
+
+    // Download file from Supabase Storage
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('student-documents')
+      .download(filePath);
+
+    if (downloadError) {
+      console.error('Receipt download error:', downloadError);
+      return res.status(500).json({ error: 'Failed to download receipt' });
+    }
+
+    // Extract filename from path (preserves original filename with extension)
+    const filename = filePath.split('/').pop();
+    
+    // Infer content type from filename extension
+    let contentType = 'application/octet-stream';
+    if (filename) {
+      const ext = filename.split('.').pop()?.toLowerCase();
+      const mimeTypes = {
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
+      contentType = mimeTypes[ext] || 'application/octet-stream';
+    }
+
+    // Set headers to force download with correct content type
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+
+    // Convert blob to buffer and send
+    const buffer = Buffer.from(await fileData.arrayBuffer());
+    res.send(buffer);
+
+  } catch (err) {
+    console.error('GET /payments/:id/receipt/download error:', err.message);
+    res.status(500).json({ error: 'Failed to download receipt' });
   }
 });
 

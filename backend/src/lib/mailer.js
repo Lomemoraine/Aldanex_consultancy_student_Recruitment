@@ -451,6 +451,82 @@ function passwordChangedEmail(userName) {
   };
 }
 
+function allDocumentsApprovedEmail(studentName, totalDocuments) {
+  const firstName = studentName.split(' ')[0];
+  const dashboardUrl = `${process.env.FRONTEND_URL}/dashboard/universities`;
+
+  return {
+    subject: '🎉 All Your Documents Have Been Approved!',
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:linear-gradient(135deg,#0b1630 0%,#1e3d8f 60%,#16a34a 100%);padding:40px 32px;text-align:center;">
+          <h1 style="color:white;margin:0;font-size:28px;letter-spacing:2px;font-weight:800;">ALDANEX</h1>
+          <p style="color:#c7a84f;margin:4px 0 0;font-size:11px;letter-spacing:4px;text-transform:uppercase;">Global Consult</p>
+          <div style="width:48px;height:2px;background:#c7a84f;margin:16px auto 0;"></div>
+        </div>
+
+        <!-- Hero message -->
+        <div style="padding:40px 32px 24px;text-align:center;background:#f0fdf4;border-bottom:1px solid #bbf7d0;">
+          <div style="font-size:64px;margin-bottom:12px;">🎉</div>
+          <h2 style="color:#16a34a;font-size:26px;margin:0 0 8px;font-weight:bold;">Congratulations, ${firstName}!</h2>
+          <p style="color:#166534;font-size:16px;margin:0;line-height:1.6;font-weight:600;">
+            All ${totalDocuments} of your documents have been approved!
+          </p>
+        </div>
+
+        <!-- Success message -->
+        <div style="padding:32px;">
+          <div style="background:#dcfce7;border:2px solid #86efac;border-radius:12px;padding:24px;margin-bottom:24px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:8px;">✓</div>
+            <p style="color:#166534;font-size:15px;margin:0;line-height:1.6;">
+              <strong>Your document verification is complete!</strong><br>
+              Our team has carefully reviewed and approved all your submitted documents.
+            </p>
+          </div>
+
+          <h3 style="color:#1e3d8f;font-size:18px;margin:0 0 16px;font-weight:700;">What's Next?</h3>
+          
+          <div style="background:#eff6ff;border-left:4px solid #1e3d8f;padding:16px;border-radius:4px;margin-bottom:16px;">
+            <p style="color:#1e3d8f;font-size:14px;margin:0;line-height:1.6;">
+              <strong>🎓 Start Exploring Universities</strong><br>
+              You can now browse our partner universities and start applying to programs that match your goals and qualifications.
+            </p>
+          </div>
+
+          <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:16px;border-radius:4px;margin-bottom:24px;">
+            <p style="color:#92400e;font-size:14px;margin:0;line-height:1.6;">
+              <strong>💬 Your Counselor is Ready</strong><br>
+              Your assigned counselor will reach out soon to discuss university options and guide you through the application process.
+            </p>
+          </div>
+
+          <div style="text-align:center;margin:32px 0;">
+            <a href="${dashboardUrl}" 
+               style="display:inline-block;background:#16a34a;color:white;padding:16px 40px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:16px;letter-spacing:0.5px;box-shadow:0 4px 12px rgba(22,163,74,0.3);">
+              Browse Universities →
+            </a>
+          </div>
+
+          <p style="color:#6b7280;font-size:13px;text-align:center;margin:16px 0 0;line-height:1.6;">
+            Questions? Your counselor is here to help every step of the way.<br>
+            You can also message us directly through your portal.
+          </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
+          <p style="color:#6b7280;font-size:13px;margin:0 0 8px;">
+            We're excited to help you achieve your international education dreams!
+          </p>
+          <p style="color:#9ca3af;font-size:11px;margin:0;">
+            © ${new Date().getFullYear()} Aldanex Global Consult · <a href="mailto:info@aldanexglobal.org" style="color:#1e3d8f;text-decoration:none;">info@aldanexglobal.org</a>
+          </p>
+        </div>
+      </div>
+    `,
+  };
+}
+
 module.exports = {
   sendEmail,
   templates: {
@@ -462,5 +538,6 @@ module.exports = {
     counselorAssignedEmail,
     passwordResetEmail,
     passwordChangedEmail,
+    allDocumentsApprovedEmail,
   },
 };

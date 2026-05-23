@@ -6,12 +6,51 @@ const { authenticate, requireRole } = require('../middleware/auth');
 // GET /api/admin/dashboard - admin overview stats
 router.get('/dashboard', authenticate, requireRole('admin', 'counselor'), async (req, res) => {
   try {
-    const [applicationsRes, studentsRes, documentsRes, paymentsRes] = await Promise.all([
-      supabase.from('applications').select('current_stage, is_active'),
-      supabase.from('profiles').select('id', { count: 'exact' }).eq('role', 'student'),
-      supabase.from('documents').select('status', { count: 'exact' }),
-      supabase.from('payments').select('status, amount'),
-    ]);
+    const userId = req.user.profile?.id || req.user.id;
+    const userRole = req.user.profile?.role || req.user.role;
+    const isCounselor = userRole === 'counselor';
+
+    let applicationsRes, documentsRes, paymentsRes;
+
+    if (isCounselor) {
+      // For counselors: First get their assigned applications
+      const { data: apps } = await supabase
+        .from('applications')
+        .select('current_stage, is_active, student_id')
+        .eq('assigned_counselor_id', userId);
+
+      applicationsRes = { data: apps };
+
+      // Get unique student IDs from assigned applications
+      const studentIds = [...new Set((apps || []).map(a => a.student_id))];
+
+      // Then get documents and payments for those students
+      if (studentIds.length > 0) {
+        const [docs, payments] = await Promise.all([
+          supabase.from('documents').select('status, student_id').in('student_id', studentIds),
+          supabase.from('payments').select('status, amount, student_id').in('student_id', studentIds),
+        ]);
+        documentsRes = docs;
+        paymentsRes = payments;
+      } else {
+        documentsRes = { data: [] };
+        paymentsRes = { data: [] };
+      }
+    } else {
+      // For admins: Get all data
+      const [apps, docs, payments] = await Promise.all([
+        supabase.from('applications').select('current_stage, is_active, student_id'),
+        supabase.from('documents').select('status, student_id'),
+        supabase.from('payments').select('status, amount, student_id'),
+      ]);
+      applicationsRes = apps;
+      documentsRes = docs;
+      paymentsRes = payments;
+    }
+
+    // Get unique student IDs from applications
+    const studentIds = [...new Set((applicationsRes.data || []).map(a => a.student_id))];
+    const totalStudents = studentIds.length;
 
     const stageBreakdown = (applicationsRes.data || []).reduce((acc, a) => {
       acc[a.current_stage] = (acc[a.current_stage] || 0) + 1;
@@ -28,13 +67,15 @@ router.get('/dashboard', authenticate, requireRole('admin', 'counselor'), async 
       .reduce((sum, p) => sum + Number(p.amount), 0);
 
     res.json({
-      total_students: studentsRes.count || 0,
+      total_students: totalStudents,
       total_applications: applicationsRes.data?.length || 0,
       stage_breakdown: stageBreakdown,
       document_status: docStatusBreakdown,
       total_revenue: totalRevenue,
+      is_counselor: isCounselor,
     });
   } catch (err) {
+    console.error('Dashboard error:', err);
     res.status(500).json({ error: err.message });
   }
 });
