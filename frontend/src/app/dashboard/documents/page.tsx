@@ -122,7 +122,7 @@ export default function DocumentsPage() {
       })
 
       // Get the content type from response headers
-      const contentType = response.headers['content-type']
+      const contentType = response.headers['content-type'] as string | undefined
       
       // Get filename from Content-Disposition header if available
       const contentDisposition = response.headers['content-disposition']
@@ -136,8 +136,8 @@ export default function DocumentsPage() {
       }
       
       // If filename doesn't have extension, try to add it based on content type
-      if (!filename.includes('.')) {
-        const ext = contentType?.split('/')[1]?.split(';')[0]
+      if (!filename.includes('.') && contentType && typeof contentType === 'string') {
+        const ext = contentType.split('/')[1]?.split(';')[0]
         if (ext) {
           filename = `${filename}.${ext}`
         }
