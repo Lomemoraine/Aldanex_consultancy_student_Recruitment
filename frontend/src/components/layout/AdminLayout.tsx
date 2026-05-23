@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard, Users, FileText, GraduationCap,
   MessageSquare, Bell, CreditCard, Settings, LogOut,
-  Menu, X, UserCog, Mail, ClipboardList
+  Menu, X, UserCog, Mail, ClipboardList, Plane
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
@@ -18,11 +18,13 @@ const adminNav = [
   { href: '/admin',              label: 'Dashboard',    icon: LayoutDashboard, roles: null },
   { href: '/admin/students',     label: 'Students',     icon: Users,           roles: ['admin', 'counselor', 'admissions'] },
   { href: '/admin/applications', label: 'Applications', icon: FileText,        roles: null },
-  { href: '/admin/admissions',   label: 'Admissions',   icon: ClipboardList,   roles: ['admin', 'admissions'] },
+  { href: '/admin/admissions',   label: 'Admissions',   icon: ClipboardList,   roles: ['admin', 'admissions', 'counselor'] },
   { href: '/admin/documents',    label: 'Documents',    icon: FileText,        roles: null },
   { href: '/admin/counseling',   label: 'Counseling',   icon: MessageSquare,   roles: ['admin', 'counselor'] },
   { href: '/admin/messages',     label: 'Messages',     icon: Mail,            roles: null },
-  { href: '/admin/universities', label: 'Universities', icon: GraduationCap,   roles: ['admin', 'admissions'] },
+  { href: '/admin/universities', label: 'Universities', icon: GraduationCap,   roles: ['admin', 'admissions', 'counselor'] },
+  { href: '/admin/universities/prepare', label: 'Preparation', icon: ClipboardList, roles: ['admin', 'admissions', 'counselor'], indent: true },
+  { href: '/admin/visa',         label: 'Visa',         icon: Plane,           roles: ['admin', 'counselor'] },
   { href: '/admin/payments',     label: 'Payments',     icon: CreditCard,      roles: ['admin', 'admissions'] },
   { href: '/admin/staff',        label: 'Staff',        icon: UserCog,         roles: ['admin'] },
   { href: '/admin/settings',     label: 'Settings',     icon: Settings,        roles: null },
@@ -88,10 +90,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {visibleNav.map(({ href, label, icon: Icon }) => (
+          {visibleNav.map(({ href, label, icon: Icon, indent }) => (
             <Link key={href} href={href}
               className={clsx(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+                indent && 'ml-4 text-xs',
                 pathname === href || (href !== '/admin' && pathname.startsWith(href))
                   ? 'bg-accent-500 text-white shadow-sm'
                   : 'text-brand-300 hover:bg-brand-800 hover:text-white'

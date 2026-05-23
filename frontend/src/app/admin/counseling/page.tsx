@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import api from '@/lib/api'
-import { Calendar, Plus, X, RefreshCw, CheckCircle, Clock, AlertCircle } from 'lucide-react'
+import { Calendar, Plus, X, RefreshCw, CheckCircle, Clock, AlertCircle, ClipboardCheck } from 'lucide-react'
 import clsx from 'clsx'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -26,6 +27,11 @@ export default function AdminCounselingPage() {
   const [formError, setFormError] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [statusFilter, setStatusFilter] = useState('scheduled')
+  
+  // Complete session modal
+  const [showCompleteModal, setShowCompleteModal] = useState(false)
+  const [completingSession, setCompletingSession] = useState<any>(null)
+  const [completeForm, setCompleteForm] = useState({ meeting_notes: '', counselor_recommendations: '' })
 
   useEffect(() => { load() }, [])
 
@@ -80,10 +86,30 @@ export default function AdminCounselingPage() {
   }
 
   async function markComplete(sessionId: string) {
+    setSubmitting(true)
     try {
-      await api.patch(`/counseling/${sessionId}`, { status: 'completed' })
+      await api.patch(`/counseling/${sessionId}`, { 
+        status: 'completed',
+        meeting_notes: completeForm.meeting_notes || undefined,
+        counselor_recommendations: completeForm.counselor_recommendations || undefined,
+      })
+      setShowCompleteModal(false)
+      setCompletingSession(null)
+      setCompleteForm({ meeting_notes: '', counselor_recommendations: '' })
       await load()
-    } catch (err) { console.error(err) }
+    } catch (err) { 
+      console.error(err)
+      setFormError('Failed to complete session')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function openCompleteModal(session: any) {
+    setCompletingSession(session)
+    setCompleteForm({ meeting_notes: '', counselor_recommendations: '' })
+    setShowCompleteModal(true)
+    setFormError('')
   }
 
   const filtered = sessions.filter(s => !statusFilter || s.status === statusFilter)
@@ -100,6 +126,9 @@ export default function AdminCounselingPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Link href="/admin/counseling/assessments" className="btn-secondary flex items-center gap-2 text-sm">
+            <ClipboardCheck size={14} /> Assessments
+          </Link>
           <button onClick={load} className="btn-secondary flex items-center gap-2 text-sm">
             <RefreshCw size={14} /> Refresh
           </button>
@@ -233,7 +262,7 @@ export default function AdminCounselingPage() {
                       className="text-xs text-brand-600 hover:underline">Join</a>
                   )}
                   {s.status === 'scheduled' && (
-                    <button onClick={() => markComplete(s.id)}
+                    <button onClick={() => openCompleteModal(s)}
                       className="text-xs bg-green-100 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-200">
                       Mark Complete
                     </button>
@@ -242,6 +271,102 @@ export default function AdminCounselingPage() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Complete Session Modal */}
+      {showCompleteModal && completingSession && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-xl font-semibold">Complete Counseling Session</h2>
+                <button 
+                  onClick={() => setShowCompleteModal(false)} 
+                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">
+                  <strong>Student:</strong> {completingSession.student_name}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  <strong>Session:</strong> {completingSession.session_type} via {completingSession.platform}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  <strong>Scheduled:</strong> {new Date(completingSession.scheduled_at).toLocaleString()}
+                </p>
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); markComplete(completingSession.id); }} className="space-y-4">
+                <div>
+                  <label className="label">Meeting Notes</label>
+                  <textarea
+                    className="input"
+                    rows={4}
+                    placeholder="Add notes about what was discussed in the session..."
+                    value={completeForm.meeting_notes}
+                    onChange={e => setCompleteForm(prev => ({ ...prev, meeting_notes: e.target.value }))}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Internal notes for your records</p>
+                </div>
+
+                <div>
+                  <label className="label">Recommendations for Student <span className="text-red-500">*</span></label>
+                  <textarea
+                    className="input"
+                    rows={6}
+                    required
+                    placeholder="Add detailed recommendations that will be visible to the student on their dashboard...
+
+Example:
+Based on your excellent academic background and strong English proficiency, I recommend applying to:
+1. University of Manchester - MSc Computer Science
+2. University of Toronto - MEng Software Engineering
+3. University of Melbourne - Master of IT
+
+Next Steps:
+- Research each university's specific requirements
+- Prepare your statement of purpose
+- Gather recommendation letters"
+                    value={completeForm.counselor_recommendations}
+                    onChange={e => setCompleteForm(prev => ({ ...prev, counselor_recommendations: e.target.value }))}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    These recommendations will be visible to the student on their dashboard
+                  </p>
+                </div>
+
+                {formError && (
+                  <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg">
+                    {formError}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button 
+                    type="submit" 
+                    className="btn-primary flex items-center gap-2"
+                    disabled={submitting || !completeForm.counselor_recommendations.trim()}
+                  >
+                    <CheckCircle size={16} />
+                    {submitting ? 'Completing...' : 'Complete Session'}
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowCompleteModal(false)} 
+                    className="btn-secondary"
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       )}
     </div>

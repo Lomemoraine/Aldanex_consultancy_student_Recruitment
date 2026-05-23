@@ -21,8 +21,31 @@ export default function ApplicationDetailPage() {
   const [assigning, setAssigning] = useState(false)
   const [notes, setNotes] = useState('')
   const [selectedCounselor, setSelectedCounselor] = useState('')
+  const [userRole, setUserRole] = useState<string>('')
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { 
+    checkUserRole()
+    load() 
+  }, [id])
+
+  async function checkUserRole() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+
+      if (profile) {
+        setUserRole(profile.role)
+      }
+    } catch (err) {
+      console.error('Failed to check user role:', err)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -239,24 +262,26 @@ export default function ApplicationDetailPage() {
             </dl>
           </div>
 
-          {/* Assign counselor */}
-          <div className="card">
-            <div className="flex items-center gap-2 mb-4">
-              <MessageSquare size={16} className="text-brand-600" />
-              <h2 className="font-semibold">Assign Counselor</h2>
+          {/* Assign counselor - Only for admins */}
+          {userRole === 'admin' && (
+            <div className="card">
+              <div className="flex items-center gap-2 mb-4">
+                <MessageSquare size={16} className="text-brand-600" />
+                <h2 className="font-semibold">Assign Counselor</h2>
+              </div>
+              <select className="input mb-3" value={selectedCounselor}
+                onChange={e => setSelectedCounselor(e.target.value)}>
+                <option value="">Select counselor</option>
+                {counselors.map(c => (
+                  <option key={c.id} value={c.id}>{c.full_name}</option>
+                ))}
+              </select>
+              <button onClick={assignCounselor} disabled={assigning || !selectedCounselor}
+                className="btn-primary w-full text-sm disabled:opacity-50">
+                {assigning ? 'Assigning...' : 'Assign'}
+              </button>
             </div>
-            <select className="input mb-3" value={selectedCounselor}
-              onChange={e => setSelectedCounselor(e.target.value)}>
-              <option value="">Select counselor</option>
-              {counselors.map(c => (
-                <option key={c.id} value={c.id}>{c.full_name}</option>
-              ))}
-            </select>
-            <button onClick={assignCounselor} disabled={assigning || !selectedCounselor}
-              className="btn-primary w-full text-sm disabled:opacity-50">
-              {assigning ? 'Assigning...' : 'Assign'}
-            </button>
-          </div>
+          )}
 
           {/* Quick links */}
           <div className="card">

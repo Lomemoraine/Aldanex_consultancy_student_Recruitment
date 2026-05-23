@@ -79,7 +79,19 @@ function VerifyForm() {
       })
       router.push('/login?verified=1')
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Verification failed. Please try again.')
+      console.error('Verification error:', err)
+      
+      // Provide specific error messages
+      if (err.code === 'ERR_NETWORK' || err.message?.toLowerCase().includes('network')) {
+        setError('Unable to connect to the server. Please check your internet connection.')
+      } else if (err.response?.status === 400) {
+        setError(err.response?.data?.error || 'Invalid or expired verification code.')
+      } else if (!err.response) {
+        setError('Cannot reach the server. Please check if the server is running.')
+      } else {
+        setError(err.response?.data?.error || 'Verification failed. Please try again.')
+      }
+      
       setOtp(['', '', '', '', '', ''])
       inputRefs.current[0]?.focus()
     } finally {
@@ -98,7 +110,15 @@ function VerifyForm() {
       setOtp(['', '', '', '', '', ''])
       inputRefs.current[0]?.focus()
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to resend code.')
+      console.error('Resend error:', err)
+      
+      if (err.code === 'ERR_NETWORK' || err.message?.toLowerCase().includes('network')) {
+        setError('Unable to connect to the server. Please check your internet connection.')
+      } else if (!err.response) {
+        setError('Cannot reach the server. Please try again.')
+      } else {
+        setError(err.response?.data?.error || 'Failed to resend code. Please try again.')
+      }
     } finally {
       setResending(false)
     }

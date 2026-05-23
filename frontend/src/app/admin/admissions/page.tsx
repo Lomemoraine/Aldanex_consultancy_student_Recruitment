@@ -39,23 +39,60 @@ export default function AdmissionsPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [stageFilter, setStageFilter] = useState('')
   const [actionLoading, setActionLoading] = useState('')
+  const [userRole, setUserRole] = useState<string>('')
+  const [userId, setUserId] = useState<string>('')
 
   // Per-application form state
   const [submitForms, setSubmitForms] = useState<Record<string, { ref: string; sop: string }>>({})
   const [offerForms, setOfferForms] = useState<Record<string, { uni_app_id: string; outcome: string; conditions: string; deadline: string }>>({})
   const [casForms, setCasForms] = useState<Record<string, { type: string; number: string }>>({})
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { 
+    loadUserRole()
+  }, [])
+
+  useEffect(() => {
+    if (userRole) {
+      load()
+    }
+  }, [userRole, userId])
+
+  async function loadUserRole() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, id')
+          .eq('id', user.id)
+          .single()
+        
+        if (profile) {
+          setUserRole(profile.role)
+          setUserId(profile.id)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load user role:', err)
+    }
+  }
 
   async function load() {
     setLoading(true)
     try {
       // Load all applications at admissions stages
-      const { data: apps } = await supabase
+      let query = supabase
         .from('applications')
-        .select('id, student_id, current_stage, created_at')
+        .select('id, student_id, current_stage, created_at, assigned_counselor_id')
         .in('current_stage', ADMISSIONS_STAGES)
         .order('created_at', { ascending: false })
+
+      // Filter for counselors - only show assigned applications
+      if (userRole === 'counselor') {
+        query = query.eq('assigned_counselor_id', userId)
+      }
+
+      const { data: apps } = await query
 
       if (!apps || apps.length === 0) { setApplications([]); setLoading(false); return }
 
@@ -174,7 +211,13 @@ export default function AdmissionsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Admissions Workflow</h1>
-          <p className="text-gray-500 mt-1">{applications.length} active applications in admissions stages</p>
+          <p className="text-gray-500 mt-1">
+            {applications.length} active application{applications.length !== 1 ? 's' : ''} in admissions stages
+            {userRole === 'counselor' && ' (assigned to you)'}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">
+            Showing students at: University Selection, Application Submission, Offer Letter, and Tuition Deposit stages
+          </p>
         </div>
         <button onClick={load} className="btn-secondary flex items-center gap-2 text-sm">
           <RefreshCw size={14} /> Refresh
@@ -217,7 +260,25 @@ export default function AdmissionsPage() {
       ) : filtered.length === 0 ? (
         <div className="card text-center py-12">
           <GraduationCap size={32} className="text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No applications at admissions stages{stageFilter ? ' for this filter' : ''}.</p>
+          <p className="text-gray-500 font-medium">
+            {userRole === 'counselor' 
+              ? 'No assigned students at admissions stages'
+              : 'No applications at admissions stages'
+            }
+            {stageFilter ? ' for this filter' : ''}.
+          </p>
+          <div className="mt-4 text-sm text-gray-400 max-w-md mx-auto space-y-2">
+            <p>Students appear here when they are at:</p>
+            <div className="flex flex-wrap gap-2 justify-center mt-2">
+              <span className="badge bg-cyan-100 text-cyan-700 text-xs">University Selection</span>
+              <span className="badge bg-orange-100 text-orange-700 text-xs">Application Submission</span>
+              <span className="badge bg-pink-100 text-pink-700 text-xs">Offer Letter</span>
+              <span className="badge bg-emerald-100 text-emerald-700 text-xs">Tuition Deposit</span>
+            </div>
+            <p className="mt-3 text-xs">
+              Students at earlier stages (Document Upload, Counseling) or later stages (Visa, Pre-Departure) won't appear here.
+            </p>
+          </div>
         </div>
       ) : (
         <div className="space-y-4">

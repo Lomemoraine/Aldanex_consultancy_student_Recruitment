@@ -163,8 +163,12 @@ export default function AdminPaymentsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {p.receipt_url && (
-                          <a href={p.receipt_url} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-xs text-brand-600 hover:underline">
+                          <a
+                            href={p.receipt_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-brand-600 hover:underline"
+                          >
                             <Eye size={12} /> Receipt
                           </a>
                         )}

@@ -16,8 +16,33 @@ export default function ApplicationsPage() {
   const [deleting, setDeleting] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<any>(null)
   const [error, setError] = useState('')
+  const [userRole, setUserRole] = useState<string>('')
+  const [userId, setUserId] = useState<string>('')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { 
+    loadUserRole()
+    load() 
+  }, [])
+
+  async function loadUserRole() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, id')
+          .eq('id', user.id)
+          .single()
+        
+        if (profile) {
+          setUserRole(profile.role)
+          setUserId(profile.id)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load user role:', err)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -25,8 +50,13 @@ export default function ApplicationsPage() {
       const appsRes = await api.get('/applications')
       const apps = appsRes.data || []
 
+      // Filter applications for counselors - only show assigned applications
+      const filteredApps = userRole === 'counselor' 
+        ? apps.filter((a: any) => a.assigned_counselor_id === userId)
+        : apps
+
       // Fetch student profiles for all applications
-      const studentIds = Array.from(new Set(apps.map((a: any) => a.student_id)))
+      const studentIds = Array.from(new Set(filteredApps.map((a: any) => a.student_id)))
       let studentMap: Record<string, any> = {}
 
       if (studentIds.length > 0) {
@@ -40,7 +70,7 @@ export default function ApplicationsPage() {
 
       // Fetch counselor profiles
       const counselorIds = Array.from(new Set(
-        apps.filter((a: any) => a.assigned_counselor_id).map((a: any) => a.assigned_counselor_id)
+        filteredApps.filter((a: any) => a.assigned_counselor_id).map((a: any) => a.assigned_counselor_id)
       ))
       let counselorMap: Record<string, any> = {}
 
@@ -53,7 +83,7 @@ export default function ApplicationsPage() {
         ;(counselors || []).forEach((c: any) => { counselorMap[c.id] = c })
       }
 
-      const enriched = apps.map((a: any) => ({
+      const enriched = filteredApps.map((a: any) => ({
         ...a,
         student: studentMap[a.student_id] || null,
         counselor: counselorMap[a.assigned_counselor_id] || null,
@@ -139,7 +169,12 @@ export default function ApplicationsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Applications</h1>
-          <p className="text-gray-500 mt-1">{filtered.length} of {applications.length} applications</p>
+          <p className="text-gray-500 mt-1">
+            {userRole === 'counselor' && applications.length === 0 
+              ? 'You have not been assigned any applications yet'
+              : `${filtered.length} of ${applications.length} applications`
+            }
+          </p>
         </div>
         <button onClick={load} className="btn-secondary flex items-center gap-2 text-sm">
           <RefreshCw size={14} /> Refresh
@@ -185,7 +220,14 @@ export default function ApplicationsPage() {
               {loading ? (
                 <tr><td colSpan={7} className="text-center py-12 text-gray-400">Loading...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-12 text-gray-400">No applications found</td></tr>
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                    {userRole === 'counselor' 
+                      ? 'You have not been assigned any applications yet'
+                      : 'No applications found'
+                    }
+                  </td>
+                </tr>
               ) : filtered.map(app => (
                 <tr key={app.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
@@ -215,14 +257,16 @@ export default function ApplicationsPage() {
                         className="text-brand-600 hover:text-brand-700 p-1.5 rounded-lg hover:bg-brand-50">
                         <ChevronRight size={16} />
                       </Link>
-                      <button
-                        onClick={() => setConfirmDelete(app)}
-                        disabled={deleting === app.id}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                        title="Delete application"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {userRole !== 'counselor' && (
+                        <button
+                          onClick={() => setConfirmDelete(app)}
+                          disabled={deleting === app.id}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="Delete application"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

@@ -230,4 +230,169 @@ router.get('/me', authenticate, async (req, res) => {
   res.json(req.user);
 });
 
+// ── PASSWORD RESET FLOW ─────────────────────────────────────
+
+// POST /api/auth/forgot-password — Step 1: Request password reset
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Check if user exists
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .eq('email', email.toLowerCase())
+      .single();
+
+    // Always return success (don't reveal if email exists for security)
+    if (!profile) {
+      return res.json({ 
+        message: 'If an account exists with this email, you will receive a password reset link.' 
+      });
+    }
+
+    // Generate reset token (6-digit code for simplicity)
+    const resetToken = generateOTP();
+    const expiresAt = Date.now() + 60 * 60 * 1000; // 1 hour
+
+    // Store reset token
+    otpStore.set(`reset_${email.toLowerCase()}`, {
+      token: resetToken,
+      expiresAt,
+      userId: profile.id,
+    });
+
+    // Send password reset email
+    try {
+      const { subject, html } = templates.passwordResetEmail(
+        profile.full_name,
+        resetToken,
+        email
+      );
+      await sendEmail({ to: email, subject, html });
+    } catch (emailErr) {
+      console.error('Password reset email failed:', emailErr.message);
+      // In development, log the token
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[DEV] Password reset token for ${email}: ${resetToken}`);
+      }
+    }
+
+    res.json({ 
+      message: 'If an account exists with this email, you will receive a password reset link.',
+      // Only expose token in development when email fails
+      ...(process.env.NODE_ENV !== 'production' ? { dev_token: resetToken } : {}),
+    });
+  } catch (err) {
+    console.error('Forgot password error:', err.message);
+    res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+// POST /api/auth/verify-reset-token — Step 2: Verify reset token
+router.post('/verify-reset-token', async (req, res) => {
+  try {
+    const { email, token } = req.body;
+
+    if (!email || !token) {
+      return res.status(400).json({ error: 'Email and reset code are required' });
+    }
+
+    const stored = otpStore.get(`reset_${email.toLowerCase()}`);
+
+    if (!stored) {
+      return res.status(400).json({ error: 'Invalid or expired reset code' });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(`reset_${email.toLowerCase()}`);
+      return res.status(400).json({ error: 'Reset code has expired. Please request a new one.' });
+    }
+
+    if (stored.token !== token.trim()) {
+      return res.status(400).json({ error: 'Invalid reset code' });
+    }
+
+    res.json({ message: 'Reset code verified. You can now set a new password.' });
+  } catch (err) {
+    console.error('Verify reset token error:', err.message);
+    res.status(500).json({ error: 'Failed to verify reset code' });
+  }
+});
+
+// POST /api/auth/reset-password — Step 3: Reset password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, token, new_password } = req.body;
+
+    if (!email || !token || !new_password) {
+      return res.status(400).json({ error: 'Email, reset code, and new password are required' });
+    }
+
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    }
+
+    const stored = otpStore.get(`reset_${email.toLowerCase()}`);
+
+    if (!stored) {
+      return res.status(400).json({ error: 'Invalid or expired reset code' });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(`reset_${email.toLowerCase()}`);
+      return res.status(400).json({ error: 'Reset code has expired. Please request a new one.' });
+    }
+
+    if (stored.token !== token.trim()) {
+      return res.status(400).json({ error: 'Invalid reset code' });
+    }
+
+    // Update password using Supabase Admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      stored.userId,
+      { password: new_password }
+    );
+
+    if (updateError) throw updateError;
+
+    // Delete the reset token
+    otpStore.delete(`reset_${email.toLowerCase()}`);
+
+    // Send confirmation email
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', stored.userId)
+        .single();
+
+      if (profile) {
+        const { subject, html } = templates.passwordChangedEmail(profile.full_name);
+        await sendEmail({ to: email, subject, html });
+      }
+    } catch (emailErr) {
+      console.error('Password changed email failed:', emailErr.message);
+    }
+
+    // Create notification
+    await supabase.from('notifications').insert({
+      user_id: stored.userId,
+      type: 'success',
+      title: 'Password Changed',
+      message: 'Your password has been successfully changed. You can now sign in with your new password.',
+      link: '/login',
+    });
+
+    res.json({ message: 'Password reset successfully. You can now sign in with your new password.' });
+  } catch (err) {
+    console.error('Reset password error:', err.message);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
 module.exports = router;

@@ -16,21 +16,48 @@ export default function AdminStudentsPage() {
   const [stageFilter, setStageFilter] = useState('')
   const [deleting, setDeleting] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<any>(null) // student to confirm delete
+  const [userRole, setUserRole] = useState<string>('')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { 
+    checkUserRole()
+    load() 
+  }, [])
+
+  async function checkUserRole() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+
+      if (profile) {
+        setUserRole(profile.role)
+      }
+    } catch (err) {
+      console.error('Failed to check user role:', err)
+    }
+  }
 
   async function load() {
     setLoading(true)
     setError('')
     try {
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, student_id, nationality, preferred_study_destination, phone, created_at')
-        .eq('role', 'student')
-        .order('created_at', { ascending: false })
+      // Use backend API which handles counselor filtering
+      const response = await api.get('/students')
+      const profiles = response.data.data || response.data || []
 
-      if (profilesError) throw profilesError
-      if (!profiles || profiles.length === 0) { setStudents([]); setLoading(false); return }
+      console.log('Student profiles found:', profiles)
+      
+      if (!profiles || profiles.length === 0) { 
+        console.log('No student profiles found')
+        setStudents([])
+        setLoading(false)
+        return 
+      }
 
       const studentIds = profiles.map((p: any) => p.id)
       const { data: applications } = await supabase
@@ -43,7 +70,8 @@ export default function AdminStudentsPage() {
 
       setStudents(profiles.map((p: any) => ({ ...p, application: appMap[p.id] || null })))
     } catch (err: any) {
-      setError(err.message || 'Failed to load students.')
+      console.error('Load students error:', err)
+      setError(err.response?.data?.error || err.message || 'Failed to load students.')
     } finally {
       setLoading(false)
     }
@@ -173,7 +201,11 @@ export default function AdminStudentsPage() {
                 </td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-12 text-gray-400">
-                  {students.length === 0 ? 'No students registered yet.' : 'No students match your search.'}
+                  {students.length === 0 
+                    ? (userRole === 'counselor' 
+                        ? 'You have not been assigned any students yet.' 
+                        : 'No students registered yet.')
+                    : 'No students match your search.'}
                 </td></tr>
               ) : filtered.map(s => (
                 <tr key={s.id} className="hover:bg-gray-50 transition-colors">
@@ -202,14 +234,17 @@ export default function AdminStudentsPage() {
                           <ChevronRight size={16} />
                         </Link>
                       )}
-                      <button
-                        onClick={() => setConfirmDelete(s)}
-                        disabled={deleting === s.id}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                        title="Delete student"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {/* Only show delete button for admins */}
+                      {userRole === 'admin' && (
+                        <button
+                          onClick={() => setConfirmDelete(s)}
+                          disabled={deleting === s.id}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="Delete student"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

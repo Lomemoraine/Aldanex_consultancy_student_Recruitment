@@ -115,6 +115,50 @@ export default function DocumentsPage() {
     }
   }
 
+  async function handleDownload(documentId: string, documentName: string) {
+    try {
+      const response = await api.get(`/documents/${documentId}/download`, {
+        responseType: 'blob', // Important: tell axios to expect binary data
+      })
+
+      // Get the content type from response headers
+      const contentType = response.headers['content-type']
+      
+      // Get filename from Content-Disposition header if available
+      const contentDisposition = response.headers['content-disposition']
+      let filename = documentName
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) {
+          filename = filenameMatch[1]
+        }
+      }
+      
+      // If filename doesn't have extension, try to add it based on content type
+      if (!filename.includes('.')) {
+        const ext = contentType?.split('/')[1]?.split(';')[0]
+        if (ext) {
+          filename = `${filename}.${ext}`
+        }
+      }
+
+      // Create a blob with the correct MIME type
+      const blob = new Blob([response.data], { type: contentType })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (err: any) {
+      console.error('Download failed:', err)
+      setUploadError(`Failed to download ${documentName}. Please try again.`)
+    }
+  }
+
   async function handleUpload(
     e: React.ChangeEvent<HTMLInputElement>,
     category: string,
@@ -381,17 +425,15 @@ export default function DocumentsPage() {
                           {cfg.label}
                         </span>
 
-                        {/* View button for uploaded docs */}
-                        {existing?.file_url && (
-                          <a
-                            href={existing.file_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        {/* View/Download button for uploaded docs */}
+                        {existing?.id && (
+                          <button
+                            onClick={() => handleDownload(existing.id, docName)}
                             className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 px-2 py-1.5 rounded-lg hover:bg-brand-50 transition-colors"
                           >
                             <Eye size={13} />
                             View
-                          </a>
+                          </button>
                         )}
 
                         {/* Upload / Replace button */}

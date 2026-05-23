@@ -130,6 +130,39 @@ export default function PaymentsPage() {
     }
   }
 
+  async function handleReceiptDownload(paymentId: string, paymentType: string) {
+    try {
+      const response = await api.get(`/payments/${paymentId}/receipt/download`, {
+        responseType: 'blob',
+      })
+
+      // Create blob and trigger download
+      const blob = new Blob([response.data])
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Extract filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `receipt_${paymentType}_${Date.now()}.pdf`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/)
+        if (filenameMatch) {
+          filename = filenameMatch[1]
+        }
+      }
+      
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (err: any) {
+      console.error('Receipt download failed:', err)
+      setUploadError(err.response?.data?.error || 'Failed to download receipt. Please try again.')
+    }
+  }
+
   async function handleLogPayment(e: React.FormEvent) {
     e.preventDefault()
     setFormError('')
@@ -433,15 +466,13 @@ export default function PaymentsPage() {
                       <div className="flex items-center gap-2 mt-1">
                         {/* View receipt */}
                         {payment.receipt_url && (
-                          <a
-                            href={payment.receipt_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            onClick={() => handleReceiptDownload(payment.id, payment.payment_type)}
                             className="flex items-center gap-1 text-xs text-brand-600 hover:underline"
                           >
                             <ExternalLink size={12} />
                             View Receipt
-                          </a>
+                          </button>
                         )}
 
                         {/* Upload receipt */}

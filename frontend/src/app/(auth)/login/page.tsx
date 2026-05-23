@@ -34,19 +34,32 @@ function LoginForm() {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
       if (authError) {
-        setError('Invalid email or password. Please try again.')
+        console.log('Auth error:', authError)
+        
+        // Provide specific error messages based on the error
+        if (authError.message?.toLowerCase().includes('invalid login credentials')) {
+          setError('This account cannot be found. Please use a different account or sign up for a new account.')
+        } else if (authError.message?.toLowerCase().includes('email not confirmed')) {
+          setError('Your email is not verified. Please check your inbox for the verification code.')
+        } else if (authError.message?.toLowerCase().includes('user not found')) {
+          setError('This account cannot be found. Please use a different account or sign up for a new account.')
+        } else {
+          setError(authError.message || 'Login failed. Please try again.')
+        }
         setLoading(false)
         return
       }
 
-      const { data: profile } = await supabase
+      // Check if user profile exists
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', authData.user.id)
         .single()
 
-      if (!profile) {
-        window.location.href = '/dashboard'
+      if (profileError || !profile) {
+        setError('Account not found in our system. Please contact support or sign up again.')
+        setLoading(false)
         return
       }
 
@@ -54,7 +67,13 @@ function LoginForm() {
       window.location.href = staffRoles.includes(profile.role) ? '/admin' : '/dashboard'
 
     } catch (err: any) {
-      setError('Something went wrong. Please try again.')
+      console.error('Login error:', err)
+      // Check if it's a network error
+      if (err.message?.toLowerCase().includes('fetch') || err.message?.toLowerCase().includes('network')) {
+        setError('Unable to connect to the server. Please check your internet connection and try again.')
+      } else {
+        setError('An unexpected error occurred. Please try again later.')
+      }
       setLoading(false)
     }
   }
@@ -157,17 +176,25 @@ function LoginForm() {
                 </div>
               )}
 
-              <button type="submit" className="btn-primary w-full py-3 text-base" disabled={loading}>
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                    </svg>
-                    Signing in...
-                  </span>
-                ) : 'Sign In'}
-              </button>
+              <div className="flex items-center gap-3">
+                <button type="submit" className="btn-primary flex-1 py-3 text-base" disabled={loading}>
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      Signing in...
+                    </span>
+                  ) : 'Sign In'}
+                </button>
+                <Link 
+                  href="/forgot-password" 
+                  className="btn-secondary py-3 px-6 text-base whitespace-nowrap"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
             </form>
 
             <div className="mt-6 pt-6 border-t border-gray-100 text-center">

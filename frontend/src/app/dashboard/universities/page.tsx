@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import {
   GraduationCap, Plus, X, CheckCircle, Clock, Send,
-  AlertCircle, ExternalLink, ChevronDown, ChevronUp, RefreshCw
+  AlertCircle, ExternalLink, ChevronDown, ChevronUp, RefreshCw, DollarSign
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -52,8 +52,73 @@ export default function UniversitiesPage() {
   const [formError, setFormError] = useState('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [form, setForm] = useState(EMPTY_FORM)
+  const [documentsApproved, setDocumentsApproved] = useState(false)
+  const [checkingDocuments, setCheckingDocuments] = useState(true)
+  const [application, setApplication] = useState<any>(null)
+  const [pendingApprovals, setPendingApprovals] = useState(0)
+  const [pendingPayments, setPendingPayments] = useState(0)
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { checkDocuments() }, [])
+
+  async function checkDocuments() {
+    setCheckingDocuments(true)
+    try {
+      const appRes = await api.get('/applications')
+      const app = appRes.data?.[0]
+      if (!app) {
+        setCheckingDocuments(false)
+        return
+      }
+
+      setApplicationId(app.id)
+
+      // Check if application has progressed beyond document upload stage
+      // Stages after document_upload: initial_assessment, counseling, university_selection, etc.
+      const stagesAfterDocuments = [
+        'initial_assessment',
+        'counseling',
+        'university_selection',
+        'application_submission',
+        'offer_letter',
+        'tuition_deposit',
+        'visa_application',
+        'pre_departure',
+        'enrolled'
+      ]
+      
+      // Allow access if application stage is beyond document upload
+      if (stagesAfterDocuments.includes(app.current_stage)) {
+        setDocumentsApproved(true)
+        await loadData()
+      } else {
+        // Still at document upload stage - check if documents are approved
+        const docsRes = await api.get(`/documents/${app.id}`)
+        const documents = docsRes.data || []
+        
+        // Check if there are any approved documents
+        const approvedDocs = documents.filter((d: any) => d.status === 'approved')
+        
+        // Allow access if there are approved documents (admin has started reviewing)
+        if (approvedDocs.length > 0) {
+          setDocumentsApproved(true)
+          await loadData()
+        } else {
+          setDocumentsApproved(false)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to check documents:', err)
+      setDocumentsApproved(false)
+    } finally {
+      setCheckingDocuments(false)
+    }
+  }
+
+  useEffect(() => { 
+    if (documentsApproved) {
+      loadData() 
+    }
+  }, [documentsApproved])
 
   async function loadData() {
     setLoading(true)
@@ -62,9 +127,20 @@ export default function UniversitiesPage() {
       const app = appRes.data?.[0]
       if (!app) return
       setApplicationId(app.id)
+      setApplication(app)
 
       const uniRes = await api.get(`/universities/${app.id}`)
       setUniversities(uniRes.data || [])
+
+      // Check for pending approvals
+      const pendingRes = await api.get(`/universities/pending-approval/${app.id}`)
+      setPendingApprovals(pendingRes.data?.length || 0)
+
+      // Check for pending payments
+      const paymentPending = (uniRes.data || []).filter((a: any) => 
+        a.status === 'payment_pending' && a.application_fee && a.application_fee > 0
+      )
+      setPendingPayments(paymentPending.length)
     } catch (err) {
       console.error('Failed to load universities:', err)
     } finally {
@@ -114,6 +190,68 @@ export default function UniversitiesPage() {
   const submitted = universities.filter(u => u.status !== 'preparing').length
   const offers = universities.filter(u => u.status === 'offer_received').length
 
+  if (checkingDocuments) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
+        <p className="text-gray-400 text-sm">Checking document status...</p>
+      </div>
+    )
+  }
+
+  if (!documentsApproved) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="card text-center py-16">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-yellow-100 rounded-full mb-6">
+            <AlertCircle size={40} className="text-yellow-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Document Approval Required</h2>
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">
+            You need to upload and get all your documents approved before you can proceed to university applications.
+          </p>
+          
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-8 text-left max-w-md mx-auto">
+            <p className="text-sm font-semibold text-blue-900 mb-3">Next Steps:</p>
+            <ol className="space-y-2 text-sm text-blue-800">
+              <li className="flex items-start gap-2">
+                <span className="font-bold">1.</span>
+                <span>Go to the <strong>Documents</strong> section</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="font-bold">2.</span>
+                <span>Upload all required documents (Academic, ID, English Proficiency, Financial, etc.)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="font-bold">3.</span>
+                <span>Wait for our team to review and approve your documents (1-2 business days)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="font-bold">4.</span>
+                <span>Once all documents are approved, you can proceed to university applications</span>
+              </li>
+            </ol>
+          </div>
+
+          <div className="flex gap-3 justify-center">
+            <a href="/dashboard/documents" className="btn-primary inline-flex items-center gap-2">
+              <AlertCircle size={16} />
+              Go to Documents
+            </a>
+            <button onClick={checkDocuments} className="btn-secondary inline-flex items-center gap-2">
+              <RefreshCw size={16} />
+              Check Again
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-400 mt-6">
+            You will receive an email and SMS notification once your documents are approved.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
@@ -126,25 +264,68 @@ export default function UniversitiesPage() {
   return (
     <div className="space-y-6 max-w-4xl">
 
+      {/* Pending Approvals Alert */}
+      {pendingApprovals > 0 && (
+        <div className="card bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-green-600 rounded-full">
+              <CheckCircle size={24} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-green-900">
+                {pendingApprovals} Application{pendingApprovals > 1 ? 's' : ''} Ready for Your Approval
+              </h3>
+              <p className="text-sm text-green-700 mt-1">
+                Your applications have been prepared by our admissions team. Please review and approve them.
+              </p>
+            </div>
+            <a
+              href="/dashboard/universities/approve"
+              className="btn-primary bg-green-600 hover:bg-green-700 flex items-center gap-2 shrink-0"
+            >
+              <CheckCircle size={16} />
+              Review Now
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Payments Alert */}
+      {pendingPayments > 0 && (
+        <div className="card bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-yellow-600 rounded-full">
+              <DollarSign size={24} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-yellow-900">
+                {pendingPayments} Application Fee{pendingPayments > 1 ? 's' : ''} Pending Payment
+              </h3>
+              <p className="text-sm text-yellow-700 mt-1">
+                Complete payment to proceed with application submission.
+              </p>
+            </div>
+            <a
+              href="/dashboard/universities/payment"
+              className="btn-primary bg-yellow-600 hover:bg-yellow-700 flex items-center gap-2 shrink-0"
+            >
+              <DollarSign size={16} />
+              Pay Now
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">University Applications</h1>
           <p className="text-gray-500 mt-1">Track your university applications and offers</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={loadData} className="btn-secondary flex items-center gap-2 text-sm">
-            <RefreshCw size={14} />
-            Refresh
-          </button>
-          <button
-            onClick={() => { setShowForm(true); setFormError('') }}
-            className="btn-primary flex items-center gap-2 text-sm"
-          >
-            <Plus size={16} />
-            Add University
-          </button>
-        </div>
+        <button onClick={loadData} className="btn-secondary flex items-center gap-2 text-sm">
+          <RefreshCw size={14} />
+          Refresh
+        </button>
       </div>
 
       {/* Stats */}
@@ -161,97 +342,86 @@ export default function UniversitiesPage() {
         ))}
       </div>
 
-      {/* Add University Form */}
-      {showForm && (
-        <div className="card border-2 border-brand-200">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Plus size={18} className="text-brand-600" />
-              Add University Application
-            </h2>
-            <button
-              onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setFormError('') }}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <X size={20} />
-            </button>
+      {/* Counselor Recommendations */}
+      {application?.assessment_status === 'completed' && 
+       application?.recommended_universities && 
+       application.recommended_universities.length > 0 && (
+        <div className="card border-2 border-brand-200 bg-gradient-to-br from-brand-50 to-blue-50">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-brand-600 rounded-lg">
+              <GraduationCap size={20} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-bold text-gray-900">Counselor's Recommended Universities</h2>
+              <p className="text-sm text-gray-600">Based on your assessment, these universities are best suited for your profile</p>
+            </div>
+            {universities.length === 0 && (
+              <a
+                href="/dashboard/universities/select"
+                className="btn-primary text-sm flex items-center gap-2 shrink-0"
+              >
+                <CheckCircle size={14} />
+                Select Universities
+              </a>
+            )}
           </div>
 
-          <form onSubmit={handleAdd} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label">University Name *</label>
-                <input
-                  name="university_name"
-                  type="text"
-                  className="input"
-                  value={form.university_name}
-                  onChange={handleChange}
-                  placeholder="e.g. University of Manchester"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">Country</label>
-                <select name="university_country" className="input" value={form.university_country} onChange={handleChange}>
-                  <option value="">Select country</option>
-                  {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Course / Programme *</label>
-                <input
-                  name="course_name"
-                  type="text"
-                  className="input"
-                  value={form.course_name}
-                  onChange={handleChange}
-                  placeholder="e.g. MSc Computer Science"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">Intake</label>
-                <select name="intake" className="input" value={form.intake} onChange={handleChange}>
-                  <option value="">Select intake</option>
-                  {INTAKES.map(i => <option key={i} value={i}>{i}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Application Fee (USD)</label>
-                <input
-                  name="application_fee"
-                  type="number"
-                  className="input"
-                  value={form.application_fee}
-                  onChange={handleChange}
-                  placeholder="e.g. 50"
-                  min="0"
-                />
-              </div>
-            </div>
+          <div className="space-y-3">
+            {application.recommended_universities.map((university: string, idx: number) => {
+              // Parse university string - format: "University Name|Country|Portal URL" or just "University Name"
+              const parts = university.split('|')
+              const uniName = parts[0]
+              const uniCountry = parts[1] || ''
+              const portalUrl = parts[2] || ''
 
-            {formError && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg">
-                <AlertCircle size={16} className="shrink-0" />
-                {formError}
-              </div>
-            )}
+              return (
+                <div key={idx} className="bg-white rounded-lg p-4 border border-brand-100 hover:border-brand-300 transition-all hover:shadow-md">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center shrink-0">
+                          <span className="text-brand-700 font-bold text-sm">{idx + 1}</span>
+                        </div>
+                        <h3 className="font-semibold text-gray-900">{uniName}</h3>
+                      </div>
+                      {uniCountry && (
+                        <p className="text-sm text-gray-500 ml-10">{uniCountry}</p>
+                      )}
+                    </div>
+                    {portalUrl && (
+                      <a
+                        href={portalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-secondary text-sm flex items-center gap-2 shrink-0"
+                      >
+                        <ExternalLink size={14} />
+                        Learn More
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
 
-            <div className="flex gap-3 pt-2">
-              <button type="submit" className="btn-primary flex items-center gap-2" disabled={submitting}>
-                <Plus size={16} />
-                {submitting ? 'Adding...' : 'Add University'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setFormError('') }}
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
+          {application.counselor_recommendations && (
+            <div className="mt-4 p-4 bg-white rounded-lg border border-brand-100">
+              <p className="text-sm font-semibold text-gray-700 mb-2">Counselor's Notes:</p>
+              <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
+                {application.counselor_recommendations}
+              </p>
             </div>
-          </form>
+          )}
+
+          {universities.length === 0 && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-xs text-blue-700">
+                <strong>📝 Next Step:</strong> Click "Select Universities" above to choose which universities you'd like to apply to. 
+                Our admissions team will then prepare your applications for review.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -261,17 +431,13 @@ export default function UniversitiesPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
             <GraduationCap size={28} className="text-gray-400" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-700">No universities added yet</h3>
+          <h3 className="text-lg font-semibold text-gray-700">No Applications Yet</h3>
           <p className="text-gray-400 text-sm mt-2 mb-6">
-            Add the universities you want to apply to and track your applications here.
+            {application?.assessment_status === 'completed' && application?.recommended_universities?.length > 0
+              ? 'Select universities from your counselor\'s recommendations above to get started.'
+              : 'Your counselor will recommend universities after completing your assessment.'
+            }
           </p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="btn-primary inline-flex items-center gap-2"
-          >
-            <Plus size={16} />
-            Add Your First University
-          </button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -483,10 +649,13 @@ export default function UniversitiesPage() {
           <div className="text-sm text-blue-700">
             <p className="font-medium mb-1">How it works</p>
             <ul className="space-y-1 text-blue-600 text-xs">
-              <li>• Add the universities you're interested in — your admissions team will prepare and submit your applications</li>
-              <li>• Once submitted, you'll receive a reference number to track your application</li>
+              <li>• Your counselor recommends universities based on your assessment</li>
+              <li>• You select which universities you'd like to apply to</li>
+              <li>• Our admissions team prepares your application materials (SOP, forms, documents)</li>
+              <li>• You review and approve each application before submission</li>
+              <li>• Pay application fees (if applicable)</li>
+              <li>• We submit your applications and track responses</li>
               <li>• Offer letters will appear here when received — you can accept or decline directly</li>
-              <li>• Your counselor will guide you through the next steps after receiving an offer</li>
             </ul>
           </div>
         </div>

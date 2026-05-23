@@ -356,6 +356,101 @@ function counselorAssignedEmail(counselorName, studentName, studentId, applicati
   };
 }
 
+function passwordResetEmail(userName, resetToken, email) {
+  const firstName = userName.split(' ')[0];
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?email=${encodeURIComponent(email)}&token=${resetToken}`;
+
+  return {
+    subject: 'Reset Your Aldanex Account Password',
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1e3d8f;padding:32px;text-align:center;">
+          <h1 style="color:white;margin:0;font-size:24px;">ALDANEX</h1>
+          <p style="color:#93c5fd;margin:4px 0 0;font-size:12px;letter-spacing:2px;">CONSULTANCY</p>
+        </div>
+        <div style="padding:40px 32px;background:#f9fafb;">
+          <h2 style="color:#1e3d8f;margin:0 0 8px;">Password Reset Request</h2>
+          <p style="color:#6b7280;margin:0 0 24px;">Hi ${firstName}, we received a request to reset your password.</p>
+
+          <div style="background:white;border:2px solid #e5e7eb;border-radius:12px;padding:32px;text-align:center;margin:24px 0;">
+            <p style="color:#6b7280;font-size:13px;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px;">Your Reset Code</p>
+            <div style="font-size:48px;font-weight:bold;letter-spacing:12px;color:#1e3d8f;font-family:monospace;">${resetToken}</div>
+            <p style="color:#9ca3af;font-size:12px;margin:16px 0 0;">This code expires in <strong>1 hour</strong></p>
+          </div>
+
+          <div style="text-align:center;margin:24px 0;">
+            <a href="${resetUrl}" 
+               style="display:inline-block;background:#f97316;color:white;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:15px;letter-spacing:0.5px;">
+              Reset Password →
+            </a>
+          </div>
+
+          <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:4px;margin:16px 0;">
+            <p style="color:#92400e;font-size:13px;margin:0;">⚠️ If you didn't request this password reset, please ignore this email or contact support if you're concerned.</p>
+          </div>
+
+          <p style="color:#9ca3af;font-size:12px;margin:24px 0 0;text-align:center;">
+            Or copy this link: <br>
+            <span style="color:#1e3d8f;word-break:break-all;">${resetUrl}</span>
+          </p>
+        </div>
+        <div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;background:#f3f4f6;">
+          © ${new Date().getFullYear()} Aldanex Global Consult. All rights reserved.
+        </div>
+      </div>
+    `,
+  };
+}
+
+function passwordChangedEmail(userName) {
+  const firstName = userName.split(' ')[0];
+
+  return {
+    subject: 'Your Aldanex Password Has Been Changed',
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1e3d8f;padding:32px;text-align:center;">
+          <h1 style="color:white;margin:0;font-size:24px;">ALDANEX</h1>
+          <p style="color:#93c5fd;margin:4px 0 0;font-size:12px;letter-spacing:2px;">CONSULTANCY</p>
+        </div>
+        <div style="padding:40px 32px;background:#f9fafb;">
+          <div style="text-align:center;margin-bottom:24px;">
+            <div style="display:inline-block;background:#dcfce7;border-radius:50%;padding:16px;margin-bottom:16px;">
+              <span style="font-size:32px;">✓</span>
+            </div>
+          </div>
+          <h2 style="color:#1e3d8f;margin:0 0 8px;text-align:center;">Password Changed Successfully</h2>
+          <p style="color:#6b7280;margin:0 0 24px;text-align:center;">Hi ${firstName}, your password has been successfully changed.</p>
+
+          <div style="background:#dcfce7;border-left:4px solid #16a34a;padding:16px;border-radius:4px;margin:24px 0;">
+            <p style="color:#166534;font-size:14px;margin:0;">
+              <strong>✓ Your account is secure</strong><br>
+              You can now sign in with your new password.
+            </p>
+          </div>
+
+          <div style="text-align:center;margin:24px 0;">
+            <a href="${process.env.FRONTEND_URL}/login" 
+               style="display:inline-block;background:#1e3d8f;color:white;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:15px;">
+              Sign In Now →
+            </a>
+          </div>
+
+          <div style="background:#fee2e2;border-left:4px solid #dc2626;padding:12px 16px;border-radius:4px;margin:24px 0;">
+            <p style="color:#991b1b;font-size:13px;margin:0;">
+              <strong>⚠️ Didn't change your password?</strong><br>
+              If you didn't make this change, please contact our support team immediately at <a href="mailto:info@aldanexglobal.org" style="color:#dc2626;">info@aldanexglobal.org</a>
+            </p>
+          </div>
+        </div>
+        <div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;background:#f3f4f6;">
+          © ${new Date().getFullYear()} Aldanex Global Consult. All rights reserved.
+        </div>
+      </div>
+    `,
+  };
+}
+
 module.exports = {
   sendEmail,
   templates: {
@@ -365,5 +460,7 @@ module.exports = {
     documentReviewEmail,
     sessionScheduledEmail,
     counselorAssignedEmail,
+    passwordResetEmail,
+    passwordChangedEmail,
   },
 };

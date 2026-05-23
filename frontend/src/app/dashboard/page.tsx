@@ -7,6 +7,7 @@ import { STAGES, STAGE_COLORS } from '@/lib/constants'
 import { CheckCircle, Clock, AlertCircle, FileText, GraduationCap, CreditCard, User } from 'lucide-react'
 import Link from 'next/link'
 import clsx from 'clsx'
+import AssessmentStatusCard from '@/components/dashboard/AssessmentStatusCard'
 
 export default function StudentDashboard() {
   const [application, setApplication] = useState<any>(null)
@@ -228,6 +229,9 @@ export default function StudentDashboard() {
           })}
         </div>
       </div>
+
+      {/* Assessment Status Card */}
+      <AssessmentStatusCard application={application} />
 
       {/* Quick action cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

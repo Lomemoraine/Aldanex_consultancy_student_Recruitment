@@ -44,6 +44,8 @@ export default function AdminDashboard() {
     )
   }
 
+  const isCounselor = stats?.is_counselor || false
+
   const chartData = STAGES.map(s => ({
     name: s.label.split(' ')[0],
     fullName: s.label,
@@ -51,18 +53,45 @@ export default function AdminDashboard() {
   }))
 
   const summaryCards = [
-    { label: 'Total Students',      value: stats?.total_students ?? 0,     icon: Users,      color: 'bg-blue-100 text-blue-600' },
-    { label: 'Total Applications',  value: stats?.total_applications ?? 0, icon: FileText,   color: 'bg-purple-100 text-purple-600' },
-    { label: 'Total Revenue',       value: `$${(stats?.total_revenue || 0).toLocaleString()}`, icon: DollarSign, color: 'bg-green-100 text-green-600' },
-    { label: 'Docs Pending Review', value: stats?.document_status?.under_review ?? 0, icon: TrendingUp, color: 'bg-orange-100 text-orange-600' },
+    { 
+      label: isCounselor ? 'Assigned Students' : 'Total Students',
+      value: stats?.total_students ?? 0,
+      icon: Users,
+      color: 'bg-blue-100 text-blue-600' 
+    },
+    { 
+      label: isCounselor ? 'Assigned Applications' : 'Total Applications',
+      value: stats?.total_applications ?? 0,
+      icon: FileText,
+      color: 'bg-purple-100 text-purple-600' 
+    },
+    { 
+      label: isCounselor ? 'Revenue (Assigned)' : 'Total Revenue',
+      value: `$${(stats?.total_revenue || 0).toLocaleString()}`,
+      icon: DollarSign,
+      color: 'bg-green-100 text-green-600' 
+    },
+    { 
+      label: isCounselor ? 'Docs to Review (Assigned)' : 'Docs Pending Review',
+      value: stats?.document_status?.under_review ?? 0,
+      icon: TrendingUp,
+      color: 'bg-orange-100 text-orange-600' 
+    },
   ]
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between mb-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Aldanex Global Consult — Staff Portal</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isCounselor ? 'Counselor Dashboard' : 'Admin Dashboard'}
+          </h1>
+          <p className="text-gray-500 text-sm mt-0.5">
+            {isCounselor 
+              ? 'Aldanex Global Consult — Your Assigned Students' 
+              : 'Aldanex Global Consult — Staff Portal'
+            }
+          </p>
         </div>
       </div>
 
@@ -83,10 +112,12 @@ export default function AdminDashboard() {
 
       {/* Applications by stage chart */}
       <div className="card">
-        <h2 className="text-lg font-semibold mb-6">Applications by Stage</h2>
+        <h2 className="text-lg font-semibold mb-6">
+          {isCounselor ? 'Assigned Applications by Stage' : 'Applications by Stage'}
+        </h2>
         {chartData.every(d => d.count === 0) ? (
           <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
-            No applications yet
+            {isCounselor ? 'No assigned applications yet' : 'No applications yet'}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>

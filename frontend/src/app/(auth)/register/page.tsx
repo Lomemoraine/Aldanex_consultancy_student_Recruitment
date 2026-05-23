@@ -58,7 +58,22 @@ export default function RegisterPage() {
         router.push(`/verify?email=${encodeURIComponent(form.email)}`)
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Registration failed. Please try again.')
+      console.error('Registration error:', err)
+      
+      // Provide specific error messages
+      if (err.code === 'ERR_NETWORK' || err.message?.toLowerCase().includes('network')) {
+        setError('Unable to connect to the server. Please check your internet connection and try again.')
+      } else if (err.response?.status === 400) {
+        setError(err.response?.data?.error || 'Invalid registration details. Please check your information.')
+      } else if (err.response?.status === 500) {
+        setError('Server error. Our team has been notified. Please try again in a few minutes.')
+      } else if (err.response?.data?.error) {
+        setError(err.response.data.error)
+      } else if (!err.response) {
+        setError('Cannot reach the server. Please check if the server is running and try again.')
+      } else {
+        setError('Registration failed. Please try again or contact support if the problem persists.')
+      }
       setLoading(false)
     }
   }
