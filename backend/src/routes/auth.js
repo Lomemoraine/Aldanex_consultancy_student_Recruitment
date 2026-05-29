@@ -3,15 +3,63 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { authenticate } = require('../middleware/auth');
 const { sendEmail, templates } = require('../lib/mailer');
+const { getRedisClient } = require('../lib/redis');
 
 // ── Helper: generate 6-digit OTP ─────────────────────────────
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// ── In-memory OTP store (use Redis in production) ─────────────
-// Structure: { email: { otp, expiresAt, userData } }
-const otpStore = new Map();
+// ── Redis OTP helpers ─────────────────────────────────────────
+// All OTP/reset data is stored in Redis with a TTL so it auto-expires.
+// Keys:
+//   otp:{email}        → JSON { otp, userData }          TTL: 15 min
+//   reset:{email}      → JSON { token, userId }          TTL: 60 min
+
+const OTP_TTL_SECONDS   = 15 * 60;  // 15 minutes
+const RESET_TTL_SECONDS = 60 * 60;  // 1 hour
+
+async function setOTP(email, otp, userData) {
+  const redis = getRedisClient();
+  await redis.set(
+    `otp:${email.toLowerCase()}`,
+    JSON.stringify({ otp, userData }),
+    'EX', OTP_TTL_SECONDS
+  );
+}
+
+async function getOTP(email) {
+  const redis = getRedisClient();
+  const raw = await redis.get(`otp:${email.toLowerCase()}`);
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function deleteOTP(email) {
+  const redis = getRedisClient();
+  await redis.del(`otp:${email.toLowerCase()}`);
+}
+
+async function setResetToken(email, token, userId) {
+  const redis = getRedisClient();
+  await redis.set(
+    `reset:${email.toLowerCase()}`,
+    JSON.stringify({ token, userId }),
+    'EX', RESET_TTL_SECONDS
+  );
+}
+
+async function getResetToken(email) {
+  const redis = getRedisClient();
+  const raw = await redis.get(`reset:${email.toLowerCase()}`);
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function deleteResetToken(email) {
+  const redis = getRedisClient();
+  await redis.del(`reset:${email.toLowerCase()}`);
+}
+
+// ─────────────────────────────────────────────────────────────
 
 // POST /api/auth/register — Step 1: create unconfirmed user, send OTP
 router.post('/register', async (req, res) => {
@@ -33,18 +81,11 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'An account with this email already exists.' });
     }
 
-    // Generate OTP
+    // Generate OTP and persist to Redis
     const otp = generateOTP();
-    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+    await setOTP(email, otp, { full_name, email, phone, nationality, preferred_study_destination, password });
 
-    // Store OTP + user data temporarily
-    otpStore.set(email.toLowerCase(), {
-      otp,
-      expiresAt,
-      userData: { full_name, email, phone, nationality, preferred_study_destination, password },
-    });
-
-    // Send verification email (non-blocking — don't crash if email fails)
+    // Send verification email (non-blocking)
     let emailSent = false;
     try {
       const { subject, html } = templates.verificationEmail(full_name, otp);
@@ -52,7 +93,6 @@ router.post('/register', async (req, res) => {
       emailSent = true;
     } catch (emailErr) {
       console.error('Verification email failed:', emailErr.message);
-      // Still proceed — log the OTP to console so you can test manually
       console.log(`[DEV] OTP for ${email}: ${otp}`);
     }
 
@@ -61,7 +101,6 @@ router.post('/register', async (req, res) => {
         ? 'Verification code sent to your email. Please check your inbox.'
         : 'Account created. Email delivery failed — please contact support or check server logs.',
       email,
-      // Only expose OTP in development when email fails
       ...(process.env.NODE_ENV !== 'production' && !emailSent ? { dev_otp: otp } : {}),
     });
   } catch (err) {
@@ -79,26 +118,23 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(400).json({ error: 'Email and verification code are required.' });
     }
 
-    const stored = otpStore.get(email.toLowerCase());
+    const stored = await getOTP(email);
 
     if (!stored) {
-      return res.status(400).json({ error: 'No verification code found. Please register again.' });
-    }
-
-    if (Date.now() > stored.expiresAt) {
-      otpStore.delete(email.toLowerCase());
-      return res.status(400).json({ error: 'Verification code has expired. Please register again.' });
+      // Either never existed or Redis TTL expired
+      return res.status(400).json({ error: 'Verification code has expired or was not found. Please register again.' });
     }
 
     if (stored.otp !== otp.trim()) {
       return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
     }
 
-    // OTP valid — create the account
-    const { full_name, phone, nationality, preferred_study_destination, password } = stored.userData;
-    otpStore.delete(email.toLowerCase());
+    // OTP valid — remove it immediately (one-time use)
+    await deleteOTP(email);
 
-    // Create auth user (confirmed)
+    const { full_name, phone, nationality, preferred_study_destination, password } = stored.userData;
+
+    // Create confirmed auth user
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -113,7 +149,7 @@ router.post('/verify-otp', async (req, res) => {
 
     if (authError) throw authError;
 
-    // Create profile
+    // Create profile row
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -164,17 +200,16 @@ router.post('/verify-otp', async (req, res) => {
 router.post('/resend-otp', async (req, res) => {
   try {
     const { email } = req.body;
-    const stored = otpStore.get(email?.toLowerCase());
+
+    const stored = await getOTP(email);
 
     if (!stored) {
       return res.status(400).json({ error: 'No pending registration found. Please register again.' });
     }
 
-    // Generate new OTP
+    // Generate a fresh OTP (resets the TTL too)
     const otp = generateOTP();
-    stored.otp = otp;
-    stored.expiresAt = Date.now() + 15 * 60 * 1000;
-    otpStore.set(email.toLowerCase(), stored);
+    await setOTP(email, otp, stored.userData);
 
     const { subject, html } = templates.verificationEmail(stored.userData.full_name, otp);
     await sendEmail({ to: email, subject, html });
@@ -230,9 +265,9 @@ router.get('/me', authenticate, async (req, res) => {
   res.json(req.user);
 });
 
-// ── PASSWORD RESET FLOW ─────────────────────────────────────
+// ── PASSWORD RESET FLOW ──────────────────────────────────────
 
-// POST /api/auth/forgot-password — Step 1: Request password reset
+// POST /api/auth/forgot-password — Step 1: request password reset
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
@@ -241,50 +276,34 @@ router.post('/forgot-password', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    // Check if user exists
     const { data: profile } = await supabase
       .from('profiles')
       .select('id, full_name, email')
       .eq('email', email.toLowerCase())
       .single();
 
-    // Always return success (don't reveal if email exists for security)
+    // Always return success (don't reveal whether the email exists)
     if (!profile) {
-      return res.json({ 
-        message: 'If an account exists with this email, you will receive a password reset link.' 
+      return res.json({
+        message: 'If an account exists with this email, you will receive a password reset link.',
       });
     }
 
-    // Generate reset token (6-digit code for simplicity)
     const resetToken = generateOTP();
-    const expiresAt = Date.now() + 60 * 60 * 1000; // 1 hour
+    await setResetToken(email, resetToken, profile.id);
 
-    // Store reset token
-    otpStore.set(`reset_${email.toLowerCase()}`, {
-      token: resetToken,
-      expiresAt,
-      userId: profile.id,
-    });
-
-    // Send password reset email
     try {
-      const { subject, html } = templates.passwordResetEmail(
-        profile.full_name,
-        resetToken,
-        email
-      );
+      const { subject, html } = templates.passwordResetEmail(profile.full_name, resetToken, email);
       await sendEmail({ to: email, subject, html });
     } catch (emailErr) {
       console.error('Password reset email failed:', emailErr.message);
-      // In development, log the token
       if (process.env.NODE_ENV !== 'production') {
         console.log(`[DEV] Password reset token for ${email}: ${resetToken}`);
       }
     }
 
-    res.json({ 
+    res.json({
       message: 'If an account exists with this email, you will receive a password reset link.',
-      // Only expose token in development when email fails
       ...(process.env.NODE_ENV !== 'production' ? { dev_token: resetToken } : {}),
     });
   } catch (err) {
@@ -293,7 +312,7 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
-// POST /api/auth/verify-reset-token — Step 2: Verify reset token
+// POST /api/auth/verify-reset-token — Step 2: verify reset token
 router.post('/verify-reset-token', async (req, res) => {
   try {
     const { email, token } = req.body;
@@ -302,15 +321,10 @@ router.post('/verify-reset-token', async (req, res) => {
       return res.status(400).json({ error: 'Email and reset code are required' });
     }
 
-    const stored = otpStore.get(`reset_${email.toLowerCase()}`);
+    const stored = await getResetToken(email);
 
     if (!stored) {
       return res.status(400).json({ error: 'Invalid or expired reset code' });
-    }
-
-    if (Date.now() > stored.expiresAt) {
-      otpStore.delete(`reset_${email.toLowerCase()}`);
-      return res.status(400).json({ error: 'Reset code has expired. Please request a new one.' });
     }
 
     if (stored.token !== token.trim()) {
@@ -324,7 +338,7 @@ router.post('/verify-reset-token', async (req, res) => {
   }
 });
 
-// POST /api/auth/reset-password — Step 3: Reset password
+// POST /api/auth/reset-password — Step 3: set new password
 router.post('/reset-password', async (req, res) => {
   try {
     const { email, token, new_password } = req.body;
@@ -337,22 +351,17 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters long' });
     }
 
-    const stored = otpStore.get(`reset_${email.toLowerCase()}`);
+    const stored = await getResetToken(email);
 
     if (!stored) {
       return res.status(400).json({ error: 'Invalid or expired reset code' });
-    }
-
-    if (Date.now() > stored.expiresAt) {
-      otpStore.delete(`reset_${email.toLowerCase()}`);
-      return res.status(400).json({ error: 'Reset code has expired. Please request a new one.' });
     }
 
     if (stored.token !== token.trim()) {
       return res.status(400).json({ error: 'Invalid reset code' });
     }
 
-    // Update password using Supabase Admin API
+    // Update password
     const { error: updateError } = await supabase.auth.admin.updateUserById(
       stored.userId,
       { password: new_password }
@@ -360,10 +369,10 @@ router.post('/reset-password', async (req, res) => {
 
     if (updateError) throw updateError;
 
-    // Delete the reset token
-    otpStore.delete(`reset_${email.toLowerCase()}`);
+    // Consume the token (one-time use)
+    await deleteResetToken(email);
 
-    // Send confirmation email
+    // Send confirmation email (non-blocking)
     try {
       const { data: profile } = await supabase
         .from('profiles')
@@ -379,7 +388,7 @@ router.post('/reset-password', async (req, res) => {
       console.error('Password changed email failed:', emailErr.message);
     }
 
-    // Create notification
+    // In-app notification
     await supabase.from('notifications').insert({
       user_id: stored.userId,
       type: 'success',

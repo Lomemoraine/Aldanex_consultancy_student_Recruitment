@@ -10,7 +10,7 @@ const QUALIFICATION_LEVELS = ['High School', 'Diploma', 'Bachelor', 'Master', 'P
 const ENGLISH_TESTS = ['IELTS', 'TOEFL', 'PTE', 'Duolingo', 'Cambridge', 'None']
 const SPONSORSHIP_TYPES = ['Self-funded', 'Family', 'Government', 'Scholarship', 'Employer']
 const DESTINATIONS = ['United Kingdom', 'United States', 'Canada', 'Australia', 'Germany', 'Netherlands', 'Ireland', 'New Zealand', 'Other']
-const INTAKES = ['January', 'May', 'September', ]
+const INTAKES = ['January', 'May', 'September']
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -22,25 +22,20 @@ export default function ProfilePage() {
   const [studentId, setStudentId] = useState('')
   const [completionPct, setCompletionPct] = useState(0)
 
-  // All form fields — registration fields + extended profile fields
   const [form, setForm] = useState({
-    // Registration fields (all editable except email)
     full_name: '',
-    email: '',           // read-only
+    email: '',
     phone: '',
     nationality: '',
     preferred_study_destination: '',
-    // Personal details
     date_of_birth: '',
     gender: '',
     address: '',
     city: '',
     country: '',
-    // Passport
     passport_number: '',
     passport_expiry: '',
     passport_country: '',
-    // Education
     highest_qualification: '',
     qualification_level: '',
     institution_attended: '',
@@ -49,13 +44,18 @@ export default function ProfilePage() {
     english_test_type: '',
     english_test_score: '',
     english_test_date: '',
-    // Study preferences
     preferred_course: '',
     preferred_intake: '',
     budget_range: '',
     sponsorship_type: '',
     employment_background: '',
   })
+
+  // Helper: normalise a value coming from the DB — convert null/undefined to ''
+  // so controlled inputs never receive null (which causes React uncontrolled warnings)
+  function db(val: any): string {
+    return val == null ? '' : String(val)
+  }
 
   useEffect(() => {
     async function load() {
@@ -65,18 +65,18 @@ export default function ProfilePage() {
       const uid = session.user.id
       setUserId(uid)
 
-      // ── Step 1: Fill from session immediately (always works, no DB needed) ──
+      // Step 1: fill from session metadata immediately (no DB round-trip needed)
       const meta = session.user.user_metadata || {}
       setForm(prev => ({
         ...prev,
-        full_name:                    meta.full_name                    || '',
-        email:                        session.user.email                || '',
-        phone:                        meta.phone                        || '',
-        nationality:                  meta.nationality                  || '',
-        preferred_study_destination:  meta.preferred_study_destination  || '',
+        full_name:                   db(meta.full_name),
+        email:                       db(session.user.email),
+        phone:                       db(meta.phone),
+        nationality:                 db(meta.nationality),
+        preferred_study_destination: db(meta.preferred_study_destination),
       }))
 
-      // ── Step 2: Load full profile from DB (overwrites with latest saved data) ──
+      // Step 2: overwrite with latest saved DB values
       const { data: p } = await supabase
         .from('profiles')
         .select('*, student_profile:student_profiles(*)')
@@ -85,40 +85,40 @@ export default function ProfilePage() {
 
       if (p) {
         setStudentId(p.student_id || '')
-        const sp = p.student_profile || {}
+        // Supabase may return student_profile as an array (one-to-many join)
+        // or as an object (one-to-one). Handle both.
+        const rawSp = p.student_profile
+        const sp = Array.isArray(rawSp) ? (rawSp[0] || {}) : (rawSp || {})
+        console.log('[ProfilePage] raw student_profile:', rawSp)
+        console.log('[ProfilePage] resolved sp:', sp)
 
         setForm({
-          // Registration fields — use DB value, fall back to session metadata
-          full_name:                   p.full_name                   || meta.full_name                   || '',
-          email:                       p.email                       || session.user.email               || '',
-          phone:                       p.phone                       || meta.phone                       || '',
-          nationality:                 p.nationality                 || meta.nationality                 || '',
-          preferred_study_destination: p.preferred_study_destination || meta.preferred_study_destination || '',
-          // Personal details
-          date_of_birth:        sp.date_of_birth        || '',
-          gender:               sp.gender               || '',
-          address:              sp.address              || '',
-          city:                 sp.city                 || '',
-          country:              sp.country              || '',
-          // Passport
-          passport_number:      sp.passport_number      || '',
-          passport_expiry:      sp.passport_expiry      || '',
-          passport_country:     sp.passport_country     || '',
-          // Education
-          highest_qualification: sp.highest_qualification || '',
-          qualification_level:   sp.qualification_level   || '',
-          institution_attended:  sp.institution_attended  || '',
-          graduation_year:       sp.graduation_year       || '',
-          gpa:                   sp.gpa                   || '',
-          english_test_type:     sp.english_test_type     || '',
-          english_test_score:    sp.english_test_score    || '',
-          english_test_date:     sp.english_test_date     || '',
-          // Study preferences
-          preferred_course:      sp.preferred_course      || '',
-          preferred_intake:      sp.preferred_intake      || '',
-          budget_range:          sp.budget_range          || '',
-          sponsorship_type:      sp.sponsorship_type      || '',
-          employment_background: sp.employment_background || '',
+          full_name:                   db(p.full_name)                   || db(meta.full_name),
+          email:                       db(p.email)                       || db(session.user.email),
+          phone:                       db(p.phone)                       || db(meta.phone),
+          nationality:                 db(p.nationality)                 || db(meta.nationality),
+          preferred_study_destination: db(p.preferred_study_destination) || db(meta.preferred_study_destination),
+          date_of_birth:               db(sp.date_of_birth),
+          gender:                      db(sp.gender),
+          address:                     db(sp.address),
+          city:                        db(sp.city),
+          country:                     db(sp.country),
+          passport_number:             db(sp.passport_number),
+          passport_expiry:             db(sp.passport_expiry),
+          passport_country:            db(sp.passport_country),
+          highest_qualification:       db(sp.highest_qualification),
+          qualification_level:         db(sp.qualification_level),
+          institution_attended:        db(sp.institution_attended),
+          graduation_year:             db(sp.graduation_year),
+          gpa:                         db(sp.gpa),
+          english_test_type:           db(sp.english_test_type),
+          english_test_score:          db(sp.english_test_score),
+          english_test_date:           db(sp.english_test_date),
+          preferred_course:            db(sp.preferred_course),
+          preferred_intake:            db(sp.preferred_intake),
+          budget_range:                db(sp.budget_range),
+          sponsorship_type:            db(sp.sponsorship_type),
+          employment_background:       db(sp.employment_background),
         })
 
         setCompletionPct(sp.profile_completion_pct || 0)
@@ -131,7 +131,7 @@ export default function ProfilePage() {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target
-    if (name === 'email') return // email is read-only
+    if (name === 'email') return
     setForm(prev => ({ ...prev, [name]: value }))
   }
 
@@ -147,77 +147,39 @@ export default function ProfilePage() {
         ...studentProfileFields
       } = form
 
-      // Update profiles table
+      // Update profiles table (registration fields)
       await supabase
         .from('profiles')
         .update({ full_name, phone, nationality, preferred_study_destination })
         .eq('id', userId)
 
-      // Update student_profiles table
+      // Update student_profiles via backend (backend sanitises dates & returns fresh record)
       const result = await api.put(`/students/${userId}/profile`, studentProfileFields)
+      const saved = result?.data || {}
 
-      // Calculate completion locally based on filled key fields
-      const keyFields = [
-        'date_of_birth', 'gender', 'passport_number', 'highest_qualification',
-        'qualification_level', 'english_test_type', 'preferred_course',
-        'preferred_intake', 'budget_range', 'sponsorship_type'
-      ]
-      const filledCount = keyFields.filter(f => (studentProfileFields as any)[f]).length
-      const localPct = Math.round((filledCount / keyFields.length) * 100)
-
-      // Use backend completion % if available, otherwise use local calculation
-      const newPct = result?.data?.completion_pct ?? localPct
-      setCompletionPct(newPct)
-
-      // Re-fetch latest saved data so fields stay populated
-      const { data: p } = await supabase
-        .from('profiles')
-        .select('*, student_profile:student_profiles(*)')
-        .eq('id', userId)
-        .single()
-
-      if (p) {
-        const sp = p.student_profile || {}
-        // Update completion from DB if available
-        if (sp.profile_completion_pct !== undefined) {
-          setCompletionPct(sp.profile_completion_pct)
-        }
-        // Keep form in sync with saved data (don't clear fields)
-        setForm(prev => ({
-          ...prev,
-          full_name:                   p.full_name                   || prev.full_name,
-          phone:                       p.phone                       || prev.phone,
-          nationality:                 p.nationality                 || prev.nationality,
-          preferred_study_destination: p.preferred_study_destination || prev.preferred_study_destination,
-          date_of_birth:        sp.date_of_birth        || prev.date_of_birth,
-          gender:               sp.gender               || prev.gender,
-          address:              sp.address              || prev.address,
-          city:                 sp.city                 || prev.city,
-          country:              sp.country              || prev.country,
-          passport_number:      sp.passport_number      || prev.passport_number,
-          passport_expiry:      sp.passport_expiry      || prev.passport_expiry,
-          passport_country:     sp.passport_country     || prev.passport_country,
-          highest_qualification: sp.highest_qualification || prev.highest_qualification,
-          qualification_level:   sp.qualification_level   || prev.qualification_level,
-          institution_attended:  sp.institution_attended  || prev.institution_attended,
-          graduation_year:       sp.graduation_year       || prev.graduation_year,
-          gpa:                   sp.gpa                   || prev.gpa,
-          english_test_type:     sp.english_test_type     || prev.english_test_type,
-          english_test_score:    sp.english_test_score    || prev.english_test_score,
-          english_test_date:     sp.english_test_date     || prev.english_test_date,
-          preferred_course:      sp.preferred_course      || prev.preferred_course,
-          preferred_intake:      sp.preferred_intake      || prev.preferred_intake,
-          budget_range:          sp.budget_range          || prev.budget_range,
-          sponsorship_type:      sp.sponsorship_type      || prev.sponsorship_type,
-          employment_background: sp.employment_background || prev.employment_background,
-        }))
+      // Use completion % returned by the backend
+      if (saved.completion_pct !== undefined) {
+        setCompletionPct(saved.completion_pct)
       }
 
+      // Repopulate the form with exactly what the user typed.
+      // studentProfileFields is a plain local variable captured before the async calls,
+      // so it is always correct regardless of React state timing or backend response shape.
+      // We do NOT depend on `saved` for repopulation — the backend already persisted
+      // the data; we just need the UI to reflect what was submitted.
+      setForm({
+        full_name,
+        email,
+        phone,
+        nationality,
+        preferred_study_destination,
+        ...studentProfileFields,
+      })
+
       setSaved(true)
-      // Redirect to documents after brief success flash
       setTimeout(() => {
         router.push('/dashboard/documents')
-      }, 1200)
+      }, 1500)
     } catch (err: any) {
       setSaveError('Failed to save. Please try again.')
       console.error('Save failed:', err)
@@ -276,71 +238,34 @@ export default function ProfilePage() {
             <h2 className="text-lg font-semibold">Account Information</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-            {/* Full Name — editable */}
             <div>
               <label className="label">Full Name</label>
-              <input
-                name="full_name"
-                type="text"
-                className="input"
-                value={form.full_name}
-                onChange={handleChange}
-                placeholder="Your full name"
-              />
+              <input name="full_name" type="text" className="input"
+                value={form.full_name} onChange={handleChange} placeholder="Your full name" />
             </div>
-
-            {/* Email — read-only, clearly marked */}
             <div>
               <label className="label">
                 Email Address
                 <span className="ml-2 text-xs text-gray-400 font-normal">(cannot be changed)</span>
               </label>
-              <input
-                name="email"
-                type="email"
+              <input name="email" type="email"
                 className="input bg-gray-50 text-gray-500 cursor-not-allowed select-none"
-                value={form.email}
-                readOnly
-                tabIndex={-1}
-              />
+                value={form.email} readOnly tabIndex={-1} />
             </div>
-
-            {/* Phone — pre-filled from registration, editable */}
             <div>
               <label className="label">Phone Number</label>
-              <input
-                name="phone"
-                type="tel"
-                className="input"
-                value={form.phone}
-                onChange={handleChange}
-                placeholder="+254712345678"
-              />
+              <input name="phone" type="tel" className="input"
+                value={form.phone} onChange={handleChange} placeholder="+254712345678" />
             </div>
-
-            {/* Nationality — pre-filled from registration, editable */}
             <div>
               <label className="label">Nationality</label>
-              <input
-                name="nationality"
-                type="text"
-                className="input"
-                value={form.nationality}
-                onChange={handleChange}
-                placeholder="e.g. Kenyan"
-              />
+              <input name="nationality" type="text" className="input"
+                value={form.nationality} onChange={handleChange} placeholder="e.g. Kenyan" />
             </div>
-
-            {/* Preferred Study Destination — pre-filled from registration, editable */}
             <div className="sm:col-span-2">
               <label className="label">Preferred Study Destination</label>
-              <select
-                name="preferred_study_destination"
-                className="input"
-                value={form.preferred_study_destination}
-                onChange={handleChange}
-              >
+              <select name="preferred_study_destination" className="input"
+                value={form.preferred_study_destination} onChange={handleChange}>
                 <option value="">Select country</option>
                 {DESTINATIONS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>

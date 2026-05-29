@@ -124,6 +124,18 @@ router.put('/:id/profile', authenticate, async (req, res) => {
       if (req.body[field] !== undefined) updateData[field] = req.body[field];
     });
 
+    // --- FIX: sanitize empty strings to null for date and numeric fields ---
+    const dateFields = ['date_of_birth', 'passport_expiry', 'english_test_date'];
+    const numericFields = ['graduation_year', 'gpa'];
+
+    dateFields.forEach(f => {
+      if (updateData[f] === '' || updateData[f] === undefined) updateData[f] = null;
+    });
+    numericFields.forEach(f => {
+      if (updateData[f] === '' || updateData[f] === undefined) updateData[f] = null;
+    });
+    // ----------------------------------------------------------------------
+
     // Check if student_profile exists first
     const { data: existing } = await supabase
       .from('student_profiles')
@@ -186,7 +198,7 @@ router.put('/:id/profile', authenticate, async (req, res) => {
       'preferred_intake', 'budget_range', 'sponsorship_type'
     ];
     const filledCount = keyFields.filter(f => data?.[f] || updateData[f]).length;
-    const completionPct = Math.round((filledCount / keyFields.length) * 100)
+    const completionPct = Math.round((filledCount / keyFields.length) * 100);
 
     // Fetch current application stage
     const { data: app } = await supabase
@@ -214,7 +226,20 @@ router.put('/:id/profile', authenticate, async (req, res) => {
       }
     }
 
-    res.json({ ...data, completion_pct: completionPct });
+    // --- FIX: re-fetch the full saved record so the frontend always gets
+    //     the latest persisted values (enables field persistence after save) ---
+    const { data: fresh, error: freshError } = await supabase
+      .from('student_profiles')
+      .select('*')
+      .eq('user_id', req.params.id)
+      .single();
+
+    if (freshError) {
+      console.error('Re-fetch after save failed:', freshError.message);
+    }
+
+    res.json({ ...(fresh || data), completion_pct: completionPct });
+    // -------------------------------------------------------------------------
   } catch (err) {
     console.error('PUT /students/:id/profile error:', err.message);
     res.status(500).json({ error: err.message });

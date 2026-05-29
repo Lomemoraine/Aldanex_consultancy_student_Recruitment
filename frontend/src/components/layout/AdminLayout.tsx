@@ -8,9 +8,10 @@ import {
   MessageSquare, Bell, CreditCard, Settings, LogOut,
   Menu, X, UserCog, Mail, ClipboardList, Plane
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import Logo from '@/components/Logo'
+import api from '@/lib/api'
 
 // ── Role-based nav ────────────────────────────────────────────
 // roles: null = all staff | string[] = only those roles
@@ -18,12 +19,12 @@ const adminNav = [
   { href: '/admin',              label: 'Dashboard',    icon: LayoutDashboard, roles: null },
   { href: '/admin/students',     label: 'Students',     icon: Users,           roles: ['admin', 'counselor', 'admissions'] },
   { href: '/admin/applications', label: 'Applications', icon: FileText,        roles: null },
-  { href: '/admin/admissions',   label: 'Admissions',   icon: ClipboardList,   roles: ['admin', 'admissions', 'counselor'] },
+  { href: '/admin/admissions',   label: 'Admissions',   icon: ClipboardList,   roles: ['admin', 'admissions'] },
   { href: '/admin/documents',    label: 'Documents',    icon: FileText,        roles: null },
   { href: '/admin/counseling',   label: 'Counseling',   icon: MessageSquare,   roles: ['admin', 'counselor'] },
   { href: '/admin/messages',     label: 'Messages',     icon: Mail,            roles: null },
-  { href: '/admin/universities', label: 'Universities', icon: GraduationCap,   roles: ['admin', 'admissions', 'counselor'] },
-  { href: '/admin/universities/prepare', label: 'Preparation', icon: ClipboardList, roles: ['admin', 'admissions', 'counselor'], indent: true },
+  { href: '/admin/universities', label: 'Universities', icon: GraduationCap,   roles: ['counselor'] },
+  { href: '/admin/universities/prepare', label: 'Preparation', icon: ClipboardList, roles: ['counselor'], indent: true },
   { href: '/admin/visa',         label: 'Visa',         icon: Plane,           roles: ['admin', 'counselor'] },
   { href: '/admin/payments',     label: 'Payments',     icon: CreditCard,      roles: ['admin', 'admissions'] },
   { href: '/admin/staff',        label: 'Staff',        icon: UserCog,         roles: ['admin'] },
@@ -36,6 +37,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -47,6 +50,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         .single()
         .then(({ data }) => { if (data) { setUserRole(data.role); setUserName(data.full_name) } })
     })
+  }, [])
+
+  // ── Poll for unread notification count every 30 s ──────────
+  useEffect(() => {
+    async function fetchUnread() {
+      try {
+        const res = await api.get('/notifications')
+        const all: any[] = res.data || []
+        setUnreadCount(all.filter(n => !n.is_read).length)
+      } catch {
+        // silently ignore — layout must never break
+      }
+    }
+
+    fetchUnread()                                       // run immediately
+    pollRef.current = setInterval(fetchUnread, 30_000) // then every 30 s
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
   }, [])
 
   async function handleLogout() {
@@ -138,9 +160,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             )}
           </div>
           <div className="flex items-center gap-3 ml-auto">
-            <Link href="/admin/notifications"
-              className="relative p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+            <Link
+              href="/admin/notifications"
+              onClick={() => setUnreadCount(0)}
+              className="relative p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+              title={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'Notifications'}
+            >
               <Bell size={19} />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </Link>
           </div>
         </header>

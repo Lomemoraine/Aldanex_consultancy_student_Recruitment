@@ -10,11 +10,17 @@ import clsx from 'clsx'
 
 // ── Status config ─────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  preparing:      { label: 'Preparing',       color: 'text-gray-600',   bg: 'bg-gray-100',    icon: Clock },
-  submitted:      { label: 'Submitted',        color: 'text-blue-600',   bg: 'bg-blue-100',    icon: Send },
-  offer_received: { label: 'Offer Received',   color: 'text-purple-600', bg: 'bg-purple-100',  icon: CheckCircle },
-  rejected:       { label: 'Unsuccessful',     color: 'text-red-600',    bg: 'bg-red-100',     icon: X },
-  withdrawn:      { label: 'Withdrawn',        color: 'text-gray-400',   bg: 'bg-gray-100',    icon: X },
+  selected:           { label: 'Preparing',                      color: 'text-gray-600',   bg: 'bg-gray-100',    icon: Clock },
+  preparing:          { label: 'Preparing',                      color: 'text-gray-600',   bg: 'bg-gray-100',    icon: Clock },
+  ready_for_approval: { label: 'Ready for Your Review',          color: 'text-green-600',  bg: 'bg-green-100',   icon: CheckCircle },
+  changes_requested:  { label: 'Preparing',                      color: 'text-gray-600',   bg: 'bg-gray-100',    icon: Clock },
+  approved:           { label: 'Approved - Payment Pending',     color: 'text-purple-600', bg: 'bg-purple-100',  icon: CheckCircle },
+  payment_pending:    { label: 'Payment Pending',                color: 'text-orange-600', bg: 'bg-orange-100',  icon: DollarSign },
+  payment_complete:   { label: 'Preparing for Submission',       color: 'text-blue-600',   bg: 'bg-blue-100',    icon: Clock },
+  submitted:          { label: 'Awaiting University Feedback',   color: 'text-blue-600',   bg: 'bg-blue-100',    icon: Send },
+  offer_received:     { label: 'Offer Received',                 color: 'text-green-600',  bg: 'bg-green-100',   icon: CheckCircle },
+  rejected:           { label: 'Unsuccessful',                   color: 'text-red-600',    bg: 'bg-red-100',     icon: X },
+  withdrawn:          { label: 'Withdrawn',                      color: 'text-gray-400',   bg: 'bg-gray-100',    icon: X },
 }
 
 const OFFER_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -56,7 +62,6 @@ export default function UniversitiesPage() {
   const [checkingDocuments, setCheckingDocuments] = useState(true)
   const [application, setApplication] = useState<any>(null)
   const [pendingApprovals, setPendingApprovals] = useState(0)
-  const [pendingPayments, setPendingPayments] = useState(0)
 
   useEffect(() => { checkDocuments() }, [])
 
@@ -135,12 +140,6 @@ export default function UniversitiesPage() {
       // Check for pending approvals
       const pendingRes = await api.get(`/universities/pending-approval/${app.id}`)
       setPendingApprovals(pendingRes.data?.length || 0)
-
-      // Check for pending payments
-      const paymentPending = (uniRes.data || []).filter((a: any) => 
-        a.status === 'payment_pending' && a.application_fee && a.application_fee > 0
-      )
-      setPendingPayments(paymentPending.length)
     } catch (err) {
       console.error('Failed to load universities:', err)
     } finally {
@@ -290,24 +289,24 @@ export default function UniversitiesPage() {
         </div>
       )}
 
-      {/* Pending Payments Alert */}
-      {pendingPayments > 0 && (
-        <div className="card bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200">
+      {/* Payment Pending Alert */}
+      {universities.some(u => u.status === 'payment_pending' || u.status === 'approved') && (
+        <div className="card bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-200">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-yellow-600 rounded-full">
+            <div className="p-3 bg-orange-600 rounded-full">
               <DollarSign size={24} className="text-white" />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-yellow-900">
-                {pendingPayments} Application Fee{pendingPayments > 1 ? 's' : ''} Pending Payment
+              <h3 className="font-semibold text-orange-900">
+                Application Fee Payment Required
               </h3>
-              <p className="text-sm text-yellow-700 mt-1">
-                Complete payment to proceed with application submission.
+              <p className="text-sm text-orange-700 mt-1">
+                You have approved applications that require application fee payment before submission.
               </p>
             </div>
             <a
               href="/dashboard/universities/payment"
-              className="btn-primary bg-yellow-600 hover:bg-yellow-700 flex items-center gap-2 shrink-0"
+              className="btn-primary bg-orange-600 hover:bg-orange-700 flex items-center gap-2 shrink-0"
             >
               <DollarSign size={16} />
               Pay Now
@@ -535,7 +534,7 @@ export default function UniversitiesPage() {
                       )}
                       {uni.fee_paid !== undefined && (
                         <div>
-                          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fee Paid</p>
+                          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Application Fee Paid</p>
                           <p className={clsx('font-medium', uni.fee_paid ? 'text-green-600' : 'text-red-500')}>
                             {uni.fee_paid ? 'Yes' : 'No'}
                           </p>

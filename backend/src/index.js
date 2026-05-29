@@ -1,4 +1,5 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') })
+console.log('REDIS_URL:', process.env.REDIS_URL)
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

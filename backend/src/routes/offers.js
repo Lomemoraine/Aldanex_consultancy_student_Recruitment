@@ -5,7 +5,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { sendSMS, smsTemplates } = require('../lib/sms');
 
 // POST /api/offers - record an offer letter
-router.post('/', authenticate, requireRole('admin', 'admissions'), async (req, res) => {
+router.post('/', authenticate, requireRole('admin', 'admissions', 'counselor'), async (req, res) => {
   try {
     const {
       university_application_id, application_id, student_id,
@@ -34,6 +34,12 @@ router.post('/', authenticate, requireRole('admin', 'admissions'), async (req, r
       .from('university_applications')
       .update({ status: 'offer_received' })
       .eq('id', university_application_id);
+
+    // Update main application stage to offer_letter
+    await supabase
+      .from('applications')
+      .update({ current_stage: 'offer_letter' })
+      .eq('id', application_id);
 
     const outcomeMessages = {
       unconditional: 'Congratulations! You have received an unconditional offer.',
@@ -102,10 +108,62 @@ router.patch('/:id/respond', authenticate, async (req, res) => {
       .from('offer_letters')
       .update(update)
       .eq('id', req.params.id)
-      .select()
+      .select('*, university_application_id, application_id')
       .single();
 
     if (error) throw error;
+
+    // If accepted, notify admissions team and update application stage
+    if (decision === 'accepted') {
+      const { data: uniApp } = await supabase
+        .from('university_applications')
+        .select('university_name, student_id, application_id')
+        .eq('id', data.university_application_id)
+        .single();
+
+      const { data: student } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', uniApp?.student_id)
+        .single();
+
+      // Get assigned counselor from the main application
+      const { data: mainApp } = await supabase
+        .from('applications')
+        .select('assigned_counselor_id')
+        .eq('id', data.application_id)
+        .single();
+
+      // Notify ALL admin/admissions staff + the specific assigned counselor
+      const { data: adminStaff } = await supabase
+        .from('profiles')
+        .select('id')
+        .in('role', ['admin', 'admissions']);
+
+      const recipientIds = new Set((adminStaff || []).map(a => a.id));
+      if (mainApp?.assigned_counselor_id) {
+        recipientIds.add(mainApp.assigned_counselor_id);
+      }
+
+      if (recipientIds.size > 0) {
+        const notificationPayload = Array.from(recipientIds).map(uid => ({
+          user_id: uid,
+          type: 'success',
+          title: '🎓 Student Accepted Offer',
+          message: `${student?.full_name || 'A student'} has accepted the offer from ${uniApp?.university_name || 'a university'}. Next step: proceed with visa application.`,
+          link: '/admin/applications'
+        }));
+
+        await supabase.from('notifications').insert(notificationPayload);
+      }
+
+      // Update application stage to tuition_deposit (student accepted offer, now needs to pay deposit)
+      await supabase
+        .from('applications')
+        .update({ current_stage: 'tuition_deposit' })
+        .eq('id', data.application_id);
+    }
+
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
