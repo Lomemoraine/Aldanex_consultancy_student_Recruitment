@@ -1,17 +1,9 @@
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,       // mail.aldanexglobal.org
-  port: Number(process.env.SMTP_PORT), // 465
-  secure: process.env.SMTP_SECURE === 'true', // true for port 465
-  auth: {
-    user: process.env.SMTP_USER,     // info@aldanexglobal.org
-    pass: process.env.SMTP_PASS,     // your email password
-  },
-});
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 /**
- * Send an email
+ * Send an email via SendGrid
  * @param {Object} options
  * @param {string} options.to - Recipient email
  * @param {string} options.subject - Email subject
@@ -19,14 +11,19 @@ const transporter = nodemailer.createTransport({
  * @param {string} [options.text] - Plain text fallback
  */
 async function sendEmail({ to, subject, html, text }) {
-  const info = await transporter.sendMail({
-    from: `"Aldanex Global Consult" <${process.env.EMAIL_FROM}>`,
+  const msg = {
     to,
+    from: {
+      email: process.env.EMAIL_FROM || 'info@aldanexglobal.org',
+      name: 'Aldanex Global Consult',
+    },
     subject,
     html,
-    text: text || html.replace(/<[^>]*>/g, ''), // strip HTML for plain text fallback
-  });
-  return info;
+    text: text || html.replace(/<[^>]*>/g, ''),
+  };
+
+  const response = await sgMail.send(msg);
+  return response;
 }
 
 // ── Email Templates ──────────────────────────────────────────
@@ -109,7 +106,6 @@ function welcomeEmail(studentName, studentId) {
 
       <div style="display:flex;flex-direction:column;gap:0;">
 
-        <!-- Step 1 -->
         <div style="display:flex;gap:16px;padding:16px 0;border-bottom:1px solid #f3f4f6;">
           <div style="width:36px;height:36px;background:#eff6ff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:36px;font-weight:bold;color:#1e3d8f;font-size:14px;">1</div>
           <div>
@@ -118,7 +114,6 @@ function welcomeEmail(studentName, studentId) {
           </div>
         </div>
 
-        <!-- Step 2 -->
         <div style="display:flex;gap:16px;padding:16px 0;border-bottom:1px solid #f3f4f6;">
           <div style="width:36px;height:36px;background:#eff6ff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:36px;font-weight:bold;color:#1e3d8f;font-size:14px;">2</div>
           <div>
@@ -127,7 +122,6 @@ function welcomeEmail(studentName, studentId) {
           </div>
         </div>
 
-        <!-- Step 3 -->
         <div style="display:flex;gap:16px;padding:16px 0;border-bottom:1px solid #f3f4f6;">
           <div style="width:36px;height:36px;background:#eff6ff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:36px;font-weight:bold;color:#1e3d8f;font-size:14px;">3</div>
           <div>
@@ -136,7 +130,6 @@ function welcomeEmail(studentName, studentId) {
           </div>
         </div>
 
-        <!-- Step 4 -->
         <div style="display:flex;gap:16px;padding:16px 0;border-bottom:1px solid #f3f4f6;">
           <div style="width:36px;height:36px;background:#eff6ff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:36px;font-weight:bold;color:#1e3d8f;font-size:14px;">4</div>
           <div>
@@ -145,7 +138,6 @@ function welcomeEmail(studentName, studentId) {
           </div>
         </div>
 
-        <!-- Step 5 -->
         <div style="display:flex;gap:16px;padding:16px 0;">
           <div style="width:36px;height:36px;background:#eff6ff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:36px;font-weight:bold;color:#1e3d8f;font-size:14px;">5</div>
           <div>
@@ -344,9 +336,6 @@ function counselorAssignedEmail(counselorName, studentName, studentId, applicati
              style="display:inline-block;background:#1d4ed8;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;margin-top:16px;font-weight:bold;">
             View Student Application →
           </a>
-          <p style="color:#6b7280;font-size:12px;margin:16px 0 0;">
-            Or copy this link: <span style="color:#1d4ed8;">${applicationUrl}</span>
-          </p>
         </div>
         <div style="padding:16px;text-align:center;color:#6b7280;font-size:12px;">
           © ${new Date().getFullYear()} Aldanex Global Consult. All rights reserved.
@@ -386,13 +375,8 @@ function passwordResetEmail(userName, resetToken, email) {
           </div>
 
           <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:4px;margin:16px 0;">
-            <p style="color:#92400e;font-size:13px;margin:0;">⚠️ If you didn't request this password reset, please ignore this email or contact support if you're concerned.</p>
+            <p style="color:#92400e;font-size:13px;margin:0;">⚠️ If you didn't request this password reset, please ignore this email.</p>
           </div>
-
-          <p style="color:#9ca3af;font-size:12px;margin:24px 0 0;text-align:center;">
-            Or copy this link: <br>
-            <span style="color:#1e3d8f;word-break:break-all;">${resetUrl}</span>
-          </p>
         </div>
         <div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;background:#f3f4f6;">
           © ${new Date().getFullYear()} Aldanex Global Consult. All rights reserved.
@@ -414,11 +398,6 @@ function passwordChangedEmail(userName) {
           <p style="color:#93c5fd;margin:4px 0 0;font-size:12px;letter-spacing:2px;">CONSULTANCY</p>
         </div>
         <div style="padding:40px 32px;background:#f9fafb;">
-          <div style="text-align:center;margin-bottom:24px;">
-            <div style="display:inline-block;background:#dcfce7;border-radius:50%;padding:16px;margin-bottom:16px;">
-              <span style="font-size:32px;">✓</span>
-            </div>
-          </div>
           <h2 style="color:#1e3d8f;margin:0 0 8px;text-align:center;">Password Changed Successfully</h2>
           <p style="color:#6b7280;margin:0 0 24px;text-align:center;">Hi ${firstName}, your password has been successfully changed.</p>
 
@@ -439,7 +418,7 @@ function passwordChangedEmail(userName) {
           <div style="background:#fee2e2;border-left:4px solid #dc2626;padding:12px 16px;border-radius:4px;margin:24px 0;">
             <p style="color:#991b1b;font-size:13px;margin:0;">
               <strong>⚠️ Didn't change your password?</strong><br>
-              If you didn't make this change, please contact our support team immediately at <a href="mailto:info@aldanexglobal.org" style="color:#dc2626;">info@aldanexglobal.org</a>
+              Contact support immediately at <a href="mailto:info@aldanexglobal.org" style="color:#dc2626;">info@aldanexglobal.org</a>
             </p>
           </div>
         </div>
@@ -462,10 +441,8 @@ function allDocumentsApprovedEmail(studentName, totalDocuments) {
         <div style="background:linear-gradient(135deg,#0b1630 0%,#1e3d8f 60%,#16a34a 100%);padding:40px 32px;text-align:center;">
           <h1 style="color:white;margin:0;font-size:28px;letter-spacing:2px;font-weight:800;">ALDANEX</h1>
           <p style="color:#c7a84f;margin:4px 0 0;font-size:11px;letter-spacing:4px;text-transform:uppercase;">Global Consult</p>
-          <div style="width:48px;height:2px;background:#c7a84f;margin:16px auto 0;"></div>
         </div>
 
-        <!-- Hero message -->
         <div style="padding:40px 32px 24px;text-align:center;background:#f0fdf4;border-bottom:1px solid #bbf7d0;">
           <div style="font-size:64px;margin-bottom:12px;">🎉</div>
           <h2 style="color:#16a34a;font-size:26px;margin:0 0 8px;font-weight:bold;">Congratulations, ${firstName}!</h2>
@@ -474,50 +451,30 @@ function allDocumentsApprovedEmail(studentName, totalDocuments) {
           </p>
         </div>
 
-        <!-- Success message -->
         <div style="padding:32px;">
           <div style="background:#dcfce7;border:2px solid #86efac;border-radius:12px;padding:24px;margin-bottom:24px;text-align:center;">
-            <div style="font-size:48px;margin-bottom:8px;">✓</div>
             <p style="color:#166534;font-size:15px;margin:0;line-height:1.6;">
               <strong>Your document verification is complete!</strong><br>
               Our team has carefully reviewed and approved all your submitted documents.
             </p>
           </div>
 
-          <h3 style="color:#1e3d8f;font-size:18px;margin:0 0 16px;font-weight:700;">What's Next?</h3>
-          
           <div style="background:#eff6ff;border-left:4px solid #1e3d8f;padding:16px;border-radius:4px;margin-bottom:16px;">
             <p style="color:#1e3d8f;font-size:14px;margin:0;line-height:1.6;">
               <strong>🎓 Start Exploring Universities</strong><br>
-              You can now browse our partner universities and start applying to programs that match your goals and qualifications.
-            </p>
-          </div>
-
-          <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:16px;border-radius:4px;margin-bottom:24px;">
-            <p style="color:#92400e;font-size:14px;margin:0;line-height:1.6;">
-              <strong>💬 Your Counselor is Ready</strong><br>
-              Your assigned counselor will reach out soon to discuss university options and guide you through the application process.
+              You can now browse our partner universities and start applying to programs that match your goals.
             </p>
           </div>
 
           <div style="text-align:center;margin:32px 0;">
             <a href="${dashboardUrl}" 
-               style="display:inline-block;background:#16a34a;color:white;padding:16px 40px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:16px;letter-spacing:0.5px;box-shadow:0 4px 12px rgba(22,163,74,0.3);">
+               style="display:inline-block;background:#16a34a;color:white;padding:16px 40px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:16px;">
               Browse Universities →
             </a>
           </div>
-
-          <p style="color:#6b7280;font-size:13px;text-align:center;margin:16px 0 0;line-height:1.6;">
-            Questions? Your counselor is here to help every step of the way.<br>
-            You can also message us directly through your portal.
-          </p>
         </div>
 
-        <!-- Footer -->
         <div style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
-          <p style="color:#6b7280;font-size:13px;margin:0 0 8px;">
-            We're excited to help you achieve your international education dreams!
-          </p>
           <p style="color:#9ca3af;font-size:11px;margin:0;">
             © ${new Date().getFullYear()} Aldanex Global Consult · <a href="mailto:info@aldanexglobal.org" style="color:#1e3d8f;text-decoration:none;">info@aldanexglobal.org</a>
           </p>
