@@ -10,6 +10,33 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// ── Helper: validate password strength ───────────────────────
+function validatePassword(password) {
+  if (!password || password.length < 8) {
+    return { valid: false, error: 'Password must be at least 8 characters long' };
+  }
+
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+  if (!hasUpperCase) {
+    return { valid: false, error: 'Password must contain at least one uppercase letter' };
+  }
+  if (!hasLowerCase) {
+    return { valid: false, error: 'Password must contain at least one lowercase letter' };
+  }
+  if (!hasNumber) {
+    return { valid: false, error: 'Password must contain at least one number' };
+  }
+  if (!hasSpecialChar) {
+    return { valid: false, error: 'Password must contain at least one special character (!@#$%^&*()_+-=[]{};\':"|,.<>/?)' };
+  }
+
+  return { valid: true };
+}
+
 // ── Redis OTP helpers ─────────────────────────────────────────
 // All OTP/reset data is stored in Redis with a TTL so it auto-expires.
 // Keys:
@@ -68,6 +95,12 @@ router.post('/register', async (req, res) => {
 
     if (!full_name || !email || !password) {
       return res.status(400).json({ error: 'full_name, email, and password are required' });
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ error: passwordValidation.error });
     }
 
     // Check if email already exists
@@ -347,8 +380,10 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Email, reset code, and new password are required' });
     }
 
-    if (new_password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    // Validate password strength
+    const passwordValidation = validatePassword(new_password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ error: passwordValidation.error });
     }
 
     const stored = await getResetToken(email);

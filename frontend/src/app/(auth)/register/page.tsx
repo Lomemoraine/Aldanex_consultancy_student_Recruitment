@@ -4,14 +4,26 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import axios from 'axios'
-import { Eye, EyeOff, CheckCircle } from 'lucide-react'
+import { Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react'
 import Logo from '@/components/Logo'
+
+// Password strength validation
+function validatePasswordStrength(password: string) {
+  return {
+    length: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /[0-9]/.test(password),
+    special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+  }
+}
 
 export default function RegisterPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [passwordFocused, setPasswordFocused] = useState(false)
 
   const [form, setForm] = useState({
     full_name: '',
@@ -23,6 +35,9 @@ export default function RegisterPage() {
     confirm_password: '',
   })
 
+  const passwordStrength = validatePasswordStrength(form.password)
+  const isPasswordValid = Object.values(passwordStrength).every(v => v === true)
+
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
@@ -31,12 +46,13 @@ export default function RegisterPage() {
     e.preventDefault()
     setError('')
 
-    if (form.password !== form.confirm_password) {
-      setError('Passwords do not match.')
+    if (!isPasswordValid) {
+      setError('Password does not meet the strength requirements.')
       return
     }
-    if (form.password.length < 8) {
-      setError('Password must be at least 8 characters.')
+
+    if (form.password !== form.confirm_password) {
+      setError('Passwords do not match.')
       return
     }
 
@@ -187,7 +203,11 @@ export default function RegisterPage() {
                   <div className="relative">
                     <input name="password" type={showPassword ? 'text' : 'password'}
                       className="input pr-10" required
-                      value={form.password} onChange={handleChange} placeholder="Min. 8 characters" />
+                      value={form.password} 
+                      onChange={handleChange}
+                      onFocus={() => setPasswordFocused(true)}
+                      onBlur={() => setPasswordFocused(false)}
+                      placeholder="Min. 8 characters" />
                     <button type="button" onClick={() => setShowPassword(p => !p)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                       {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -201,6 +221,20 @@ export default function RegisterPage() {
                     value={form.confirm_password} onChange={handleChange} placeholder="Repeat password" />
                 </div>
               </div>
+
+              {/* Password strength indicator */}
+              {(passwordFocused || form.password.length > 0) && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
+                  <p className="text-xs font-medium text-gray-700 mb-2">Password must contain:</p>
+                  <div className="space-y-1">
+                    <PasswordRequirement met={passwordStrength.length} text="At least 8 characters" />
+                    <PasswordRequirement met={passwordStrength.uppercase} text="One uppercase letter (A-Z)" />
+                    <PasswordRequirement met={passwordStrength.lowercase} text="One lowercase letter (a-z)" />
+                    <PasswordRequirement met={passwordStrength.number} text="One number (0-9)" />
+                    <PasswordRequirement met={passwordStrength.special} text="One special character (!@#$%...)" />
+                  </div>
+                </div>
+              )}
 
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg">
@@ -236,6 +270,15 @@ export default function RegisterPage() {
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+function PasswordRequirement({ met, text }: { met: boolean; text: string }) {
+  return (
+    <div className={`flex items-center gap-2 text-xs ${met ? 'text-green-600' : 'text-gray-500'}`}>
+      {met ? <CheckCircle size={14} /> : <XCircle size={14} className="text-gray-400" />}
+      <span>{text}</span>
     </div>
   )
 }

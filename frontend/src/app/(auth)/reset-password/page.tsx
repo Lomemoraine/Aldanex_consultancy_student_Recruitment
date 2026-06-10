@@ -5,8 +5,28 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react'
 import Logo from '@/components/Logo'
+
+// Password strength validation
+function validatePasswordStrength(password: string) {
+  return {
+    length: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /[0-9]/.test(password),
+    special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+  }
+}
+
+function PasswordRequirement({ met, text }: { met: boolean; text: string }) {
+  return (
+    <div className={`flex items-center gap-2 text-xs ${met ? 'text-green-600' : 'text-gray-500'}`}>
+      {met ? <CheckCircle size={14} /> : <XCircle size={14} className="text-gray-400" />}
+      <span>{text}</span>
+    </div>
+  )
+}
 
 function ResetPasswordForm() {
   const router = useRouter()
@@ -17,11 +37,15 @@ function ResetPasswordForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [passwordFocused, setPasswordFocused] = useState(false)
   const [loading, setLoading] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [tokenVerified, setTokenVerified] = useState(false)
+
+  const passwordStrength = validatePasswordStrength(newPassword)
+  const isPasswordValid = Object.values(passwordStrength).every(v => v === true)
 
   useEffect(() => {
     const emailParam = searchParams.get('email')
@@ -74,8 +98,8 @@ function ResetPasswordForm() {
     setError('')
 
     // Validation
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters long')
+    if (!isPasswordValid) {
+      setError('Password does not meet the strength requirements')
       setLoading(false)
       return
     }
@@ -240,6 +264,8 @@ function ResetPasswordForm() {
                       className="input pr-10"
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
+                      onFocus={() => setPasswordFocused(true)}
+                      onBlur={() => setPasswordFocused(false)}
                       required
                       minLength={8}
                       placeholder="••••••••"
@@ -252,7 +278,6 @@ function ResetPasswordForm() {
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters</p>
                 </div>
 
                 <div>
@@ -276,6 +301,20 @@ function ResetPasswordForm() {
                     </button>
                   </div>
                 </div>
+
+                {/* Password strength indicator */}
+                {(passwordFocused || newPassword.length > 0) && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
+                    <p className="text-xs font-medium text-gray-700 mb-2">Password must contain:</p>
+                    <div className="space-y-1">
+                      <PasswordRequirement met={passwordStrength.length} text="At least 8 characters" />
+                      <PasswordRequirement met={passwordStrength.uppercase} text="One uppercase letter (A-Z)" />
+                      <PasswordRequirement met={passwordStrength.lowercase} text="One lowercase letter (a-z)" />
+                      <PasswordRequirement met={passwordStrength.number} text="One number (0-9)" />
+                      <PasswordRequirement met={passwordStrength.special} text="One special character (!@#$%...)" />
+                    </div>
+                  </div>
+                )}
 
                 {error && (
                   <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg">
