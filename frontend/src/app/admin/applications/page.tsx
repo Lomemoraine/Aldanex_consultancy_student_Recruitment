@@ -50,46 +50,8 @@ export default function ApplicationsPage() {
       const appsRes = await api.get('/applications')
       const apps = appsRes.data || []
 
-      // Filter applications for counselors - only show assigned applications
-      const filteredApps = userRole === 'counselor' 
-        ? apps.filter((a: any) => a.assigned_counselor_id === userId)
-        : apps
-
-      // Fetch student profiles for all applications
-      const studentIds = Array.from(new Set(filteredApps.map((a: any) => a.student_id)))
-      let studentMap: Record<string, any> = {}
-
-      if (studentIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, email, student_id, nationality, preferred_study_destination')
-          .in('id', studentIds as string[])
-
-        ;(profiles || []).forEach((p: any) => { studentMap[p.id] = p })
-      }
-
-      // Fetch counselor profiles
-      const counselorIds = Array.from(new Set(
-        filteredApps.filter((a: any) => a.assigned_counselor_id).map((a: any) => a.assigned_counselor_id)
-      ))
-      let counselorMap: Record<string, any> = {}
-
-      if (counselorIds.length > 0) {
-        const { data: counselors } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', counselorIds as string[])
-
-        ;(counselors || []).forEach((c: any) => { counselorMap[c.id] = c })
-      }
-
-      const enriched = filteredApps.map((a: any) => ({
-        ...a,
-        student: studentMap[a.student_id] || null,
-        counselor: counselorMap[a.assigned_counselor_id] || null,
-      }))
-
-      setApplications(enriched)
+      // Backend already handles filtering for counselors and includes student/counselor data
+      setApplications(apps)
     } catch (err) {
       console.error(err)
     } finally {

@@ -16,7 +16,21 @@ router.get('/', authenticate, async (req, res) => {
 
     let query = supabase
       .from('applications')
-      .select('*')
+      .select(`
+        *,
+        student:profiles!applications_student_id_fkey(
+          id,
+          full_name,
+          email,
+          student_id,
+          nationality,
+          preferred_study_destination
+        ),
+        counselor:profiles!applications_assigned_counselor_id_fkey(
+          id,
+          full_name
+        )
+      `)
       .order('created_at', { ascending: false });
 
     if (profile.role === 'student') {

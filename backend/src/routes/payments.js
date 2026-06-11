@@ -190,12 +190,33 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
     if (event.type === 'payment_intent.succeeded') {
       const pi = event.data.object;
-      await supabase
+      
+      // Update payment status
+      const { data: payment } = await supabase
         .from('payments')
         .update({ status: 'verified' })
-        .eq('provider_reference', pi.id);
+        .eq('provider_reference', pi.id)
+        .select()
+        .single();
 
-      // Notify student
+      // If this is a tuition deposit payment, update application stage to visa_application
+      if (payment && payment.payment_type === 'Tuition Deposit') {
+        await supabase
+          .from('applications')
+          .update({ current_stage: 'visa_application' })
+          .eq('id', payment.application_id);
+
+        // Notify student that they're ready for visa application
+        await supabase.from('notifications').insert({
+          user_id: payment.student_id,
+          type: 'success',
+          title: 'Ready for Visa Application',
+          message: 'Your tuition deposit has been verified. You can now proceed with your visa application. Your counselor will guide you through the process.',
+          link: '/dashboard/visa',
+        });
+      }
+
+      // Notify student of payment success
       if (pi.metadata?.student_id) {
         await supabase.from('notifications').insert({
           user_id: pi.metadata.student_id,
@@ -224,6 +245,24 @@ router.patch('/:id/verify', authenticate, requireRole('admin', 'admissions'), as
       .single();
 
     if (error) throw error;
+
+    // If this is a tuition deposit payment, update application stage to visa_application
+    if (data.payment_type === 'Tuition Deposit') {
+      await supabase
+        .from('applications')
+        .update({ current_stage: 'visa_application' })
+        .eq('id', data.application_id);
+
+      // Notify student that they're ready for visa application
+      await supabase.from('notifications').insert({
+        user_id: data.student_id,
+        type: 'success',
+        title: 'Ready for Visa Application',
+        message: 'Your tuition deposit has been verified. You can now proceed with your visa application. Your counselor will guide you through the process.',
+        link: '/dashboard/visa',
+      });
+    }
+
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });

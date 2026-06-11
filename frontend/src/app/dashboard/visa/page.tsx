@@ -19,34 +19,102 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 }
 
 const CHECKLIST_ITEMS = [
-  { key: 'passport', label: 'Valid Passport' },
-  { key: 'photos', label: 'Passport Photos' },
-  { key: 'bank_statement', label: 'Bank Statement' },
-  { key: 'acceptance_letter', label: 'University Acceptance Letter' },
-  { key: 'cas_i20', label: 'CAS / I-20 Document' },
-  { key: 'accommodation_proof', label: 'Accommodation Proof' },
-  { key: 'travel_insurance', label: 'Travel Insurance' },
-  { key: 'visa_form', label: 'Completed Visa Application Form' },
+  { key: 'passport', label: 'Valid Passport', category: 'visa_passport' },
+  { key: 'photos', label: 'Passport Photos', category: 'visa_photos' },
+  { key: 'bank_statement', label: 'Bank Statement', category: 'visa_financial' },
+  { key: 'acceptance_letter', label: 'University Acceptance Letter', category: 'visa_acceptance' },
+  { key: 'cas_i20', label: 'CAS / I-20 Document', category: 'visa_cas_i20' },
+  { key: 'accommodation_proof', label: 'Accommodation Proof', category: 'visa_accommodation' },
+  { key: 'travel_insurance', label: 'Travel Insurance', category: 'visa_insurance' },
+  { key: 'visa_form', label: 'Completed Visa Application Form', category: 'visa_form' },
 ]
 
 export default function StudentVisaPage() {
   const [visa, setVisa] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [applicationId, setApplicationId] = useState('')
+  const [documents, setDocuments] = useState<any[]>([])
+  const [uploadingDoc, setUploadingDoc] = useState('')
 
   useEffect(() => { load() }, [])
+
+  async function handleUploadDocument(category: string, documentName: string) {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.pdf,.jpg,.jpeg,.png'
+    
+    input.onchange = async (e: any) => {
+      const file = e.target?.files?.[0]
+      if (!file) return
+
+      setUploadingDoc(category)
+      try {
+        // Get upload URL
+        const urlRes = await api.post('/documents/upload-url', {
+          file_name: file.name,
+          file_type: file.type,
+        })
+
+        // Upload to Supabase Storage
+        const uploadRes = await fetch(urlRes.data.upload_url, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type },
+        })
+
+        if (!uploadRes.ok) throw new Error('Upload failed')
+
+        // Create document record
+        await api.post('/documents', {
+          application_id: applicationId,
+          document_name: documentName,
+          category: category,
+          file_path: urlRes.data.file_path,
+          status: 'pending',
+        })
+
+        await load()
+        alert('Document uploaded successfully! Your counselor will review it.')
+      } catch (err) {
+        console.error('Upload failed:', err)
+        alert('Failed to upload document')
+      } finally {
+        setUploadingDoc('')
+      }
+    }
+
+    input.click()
+  }
+
+  function getDocumentForCategory(category: string) {
+    return documents.find(doc => doc.category === category)
+  }
 
   async function load() {
     setLoading(true)
     try {
       const appRes = await api.get('/applications')
       const app = appRes.data?.[0]
-      if (!app) return
+      console.log('Student application:', app)
+      
+      if (!app) {
+        console.log('No application found for student')
+        return
+      }
 
       setApplicationId(app.id)
 
+      // Fetch visa
       const visaRes = await api.get(`/visa/${app.id}`)
+      console.log('Visa data from API:', visaRes.data)
       setVisa(visaRes.data)
+
+      // Fetch visa-related documents
+      const docsRes = await api.get('/documents')
+      const visaDocs = (docsRes.data || []).filter((doc: any) => 
+        doc.category?.startsWith('visa_')
+      )
+      setDocuments(visaDocs)
     } catch (err) {
       console.error('Failed to load visa:', err)
     } finally {
@@ -176,36 +244,66 @@ export default function StudentVisaPage() {
         <div className="space-y-2">
           {CHECKLIST_ITEMS.map(item => {
             const isComplete = checklist[item.key]
+            const doc = getDocumentForCategory(item.category)
+            const isUploading = uploadingDoc === item.category
+            
             return (
               <div 
                 key={item.key}
                 className={clsx(
-                  'flex items-center gap-3 p-3 rounded-lg border transition-colors',
+                  'flex items-center gap-3 p-3 rounded-lg border',
                   isComplete 
                     ? 'bg-green-50 border-green-200' 
+                    : doc?.status === 'pending'
+                    ? 'bg-yellow-50 border-yellow-200'
                     : 'bg-gray-50 border-gray-200'
                 )}
               >
                 <div className={clsx(
                   'w-5 h-5 rounded-full flex items-center justify-center shrink-0',
-                  isComplete ? 'bg-green-500' : 'bg-gray-300'
+                  isComplete ? 'bg-green-500' : doc?.status === 'pending' ? 'bg-yellow-500' : 'bg-gray-300'
                 )}>
                   {isComplete && <CheckCircle size={14} className="text-white" />}
+                  {doc?.status === 'pending' && <Clock size={14} className="text-white" />}
                 </div>
-                <span className={clsx(
-                  'text-sm font-medium',
-                  isComplete ? 'text-green-800' : 'text-gray-600'
-                )}>
-                  {item.label}
-                </span>
+                <div className="flex-1">
+                  <span className={clsx(
+                    'text-sm font-medium block',
+                    isComplete ? 'text-green-800' : doc?.status === 'pending' ? 'text-yellow-800' : 'text-gray-600'
+                  )}>
+                    {item.label}
+                  </span>
+                  {doc?.status === 'pending' && (
+                    <span className="text-xs text-yellow-600">Pending counselor review</span>
+                  )}
+                  {doc?.status === 'rejected' && (
+                    <span className="text-xs text-red-600">Rejected - Please reupload</span>
+                  )}
+                </div>
+                {!isComplete && (
+                  <button
+                    onClick={() => handleUploadDocument(item.category, item.label)}
+                    disabled={isUploading}
+                    className={clsx(
+                      'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                      doc?.status === 'rejected' 
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                        : 'bg-brand-600 text-white hover:bg-brand-700',
+                      isUploading && 'opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <Upload size={12} className="inline mr-1" />
+                    {isUploading ? 'Uploading...' : doc ? 'Replace' : 'Upload'}
+                  </button>
+                )}
               </div>
             )
           })}
         </div>
 
         <div className="mt-4 bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
-          <strong>Note:</strong> Your counselor will update this checklist as you submit documents. 
-          Make sure to upload all required documents to the Documents section.
+          <strong>How it works:</strong> Upload your documents using the buttons above. Your counselor will review them and mark them as complete. 
+          All documents must be approved before your visa application can be submitted.
         </div>
       </div>
 

@@ -40,7 +40,9 @@ export default function AdminVisaPage() {
 
   // Form states
   const [createForms, setCreateForms] = useState<Record<string, { visa_type: string; destination_country: string }>>({})
-  const [updateForms, setUpdateForms] = useState<Record<string, any>>({})
+  
+  // Track which visa is being edited to prevent refetch during typing
+  const [editingVisa, setEditingVisa] = useState<string | null>(null)
 
   useEffect(() => { 
     loadUserRole()
@@ -75,57 +77,20 @@ export default function AdminVisaPage() {
   async function load() {
     setLoading(true)
     try {
-      // Load all applications at visa stage
-      let query = supabase
-        .from('applications')
-        .select('id, student_id, current_stage, created_at, assigned_counselor_id')
-        .eq('current_stage', 'visa_application')
-        .order('created_at', { ascending: false })
+      // Use backend API which handles RLS policies and data enrichment
+      // Add timestamp to prevent caching
+      const response = await api.get(`/visa?t=${Date.now()}`);
+      const enriched = response.data || [];
 
-      // Filter for counselors - only show assigned applications
-      if (userRole === 'counselor') {
-        query = query.eq('assigned_counselor_id', userId)
-      }
-
-      const { data: apps } = await query
-
-      if (!apps || apps.length === 0) { 
-        setApplications([])
-        setLoading(false)
-        return 
-      }
-
-      const studentIds = apps.map((a: any) => a.student_id)
-
-      // Load student profiles
-      const { data: students } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, student_id, nationality, preferred_study_destination')
-        .in('id', studentIds)
-
-      const studentMap: Record<string, any> = {}
-      ;(students || []).forEach((s: any) => { studentMap[s.id] = s })
-
-      // Load visa applications for each app
-      const enriched = await Promise.all(apps.map(async (app: any) => {
-        const { data: visa } = await supabase
-          .from('visa_applications')
-          .select('*')
-          .eq('application_id', app.id)
-          .maybeSingle()
-
-        return {
-          ...app,
-          student: studentMap[app.student_id] || null,
-          visa: visa || null,
-        }
-      }))
-
-      setApplications(enriched)
+      console.log('Applications from API:', enriched);
+      console.log('Applications with visa:', enriched.filter((a: any) => a.visa));
+      console.log('Applications without visa:', enriched.filter((a: any) => !a.visa));
+      
+      setApplications(enriched);
     } catch (err) {
-      console.error('Failed to load visa data:', err)
+      console.error('Failed to load visa data:', err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -139,19 +104,35 @@ export default function AdminVisaPage() {
       alert('Please fill in all required fields')
       return
     }
+    
+    console.log('Creating visa with:', { appId, studentId, form: f })
+    
     setActionLoading(`create-${appId}`)
     try {
-      await api.post('/visa', {
+      const response = await api.post('/visa', {
         application_id: appId,
         student_id: studentId,
         visa_type: f.visa_type,
         destination_country: f.destination_country,
       })
+      
+      console.log('Visa created successfully:', response.data)
+      
+      // Reload the data
       await load()
+      
+      // Clear the form
       setCreateForms(prev => ({ ...prev, [appId]: { visa_type: '', destination_country: '' } }))
-    } catch (err) {
+      
+      // Keep the application expanded so user can see the result
+      setExpanded(prev => ({ ...prev, [appId]: true }))
+      
+      // Show success message
+      alert('Visa application created successfully!')
+    } catch (err: any) {
       console.error('Failed to create visa:', err)
-      alert('Failed to create visa application')
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to create visa application'
+      alert(`Error: ${errorMessage}`)
     } finally {
       setActionLoading('')
     }
@@ -160,8 +141,20 @@ export default function AdminVisaPage() {
   async function handleUpdateVisa(visaId: string, updates: any) {
     setActionLoading(`update-${visaId}`)
     try {
-      await api.patch(`/visa/${visaId}`, updates)
-      await load()
+      const response = await api.patch(`/visa/${visaId}`, updates)
+      
+      // Update local state instead of reloading everything
+      setApplications(prev => prev.map(app => {
+        if (app.visa?.id === visaId) {
+          return {
+            ...app,
+            visa: response.data
+          }
+        }
+        return app
+      }))
+      
+      console.log('Visa updated successfully:', response.data)
     } catch (err) {
       console.error('Failed to update visa:', err)
       alert('Failed to update visa application')
@@ -250,7 +243,6 @@ export default function AdminVisaPage() {
             const progress = (completedItems / totalItems) * 100
 
             const createForm = createForms[app.id] || { visa_type: '', destination_country: '' }
-            const updateForm = updateForms[visa?.id] || {}
 
             return (
               <div key={app.id} className="card p-0 overflow-hidden">
@@ -262,8 +254,12 @@ export default function AdminVisaPage() {
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-3 flex-wrap">
-                      <p className="font-semibold">{app.student?.full_name || 'Unknown'}</p>
-                      <span className="text-xs text-gray-400 font-mono">{app.student?.student_id}</span>
+                      <p className="font-semibold">
+                        {app.student?.full_name || app.student?.email || 'Unknown Student'}
+                      </p>
+                      <span className="text-xs text-gray-400 font-mono">
+                        {app.student?.student_id || 'No ID'}
+                      </span>
                       {visa && (
                         <span className={clsx('badge text-xs flex items-center gap-1.5', cfg.bg, cfg.color)}>
                           <Icon size={12} />
@@ -277,7 +273,8 @@ export default function AdminVisaPage() {
                       )}
                     </div>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      {app.student?.nationality} · {app.student?.preferred_study_destination}
+                      {app.student?.email && `${app.student.email} · `}
+                      {app.student?.nationality || 'Unknown nationality'} · {app.student?.preferred_study_destination || 'Unknown destination'}
                       {visa && visa.visa_reference_number && ` · Ref: ${visa.visa_reference_number}`}
                     </p>
                   </div>
@@ -332,6 +329,7 @@ export default function AdminVisaPage() {
                             </div>
                           </div>
                           <button
+                            type="button"
                             onClick={() => handleCreateVisa(app.id, app.student_id)}
                             disabled={!createForm.visa_type || !createForm.destination_country || actionLoading === `create-${app.id}`}
                             className="btn-primary text-sm mt-3 flex items-center gap-2 disabled:opacity-50"
