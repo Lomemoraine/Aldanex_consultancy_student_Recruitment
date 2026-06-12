@@ -88,40 +88,47 @@ export default function AdminDocumentsPage() {
   async function loadStudents() {
     setLoadingStudents(true)
     try {
+      console.log('Loading students for documents page...')
       const appsRes = await api.get('/applications')
       const apps = appsRes.data || []
-      if (apps.length === 0) { setStudents([]); setLoadingStudents(false); return }
-
-      const studentIds = Array.from(new Set(apps.map((a: any) => a.student_id))) as string[]
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, student_id')
-        .in('id', studentIds)
-
-      const profileMap: Record<string, any> = {}
-      ;(profiles || []).forEach((p: any) => { profileMap[p.id] = p })
+      console.log('Applications loaded:', apps.length)
+      
+      if (apps.length === 0) { 
+        setStudents([])
+        setLoadingStudents(false)
+        return
+      }
 
       // Load doc counts per application
       const rows: StudentRow[] = []
       await Promise.all(apps.map(async (app: any) => {
-        const profile = profileMap[app.student_id]
-        if (!profile) return
+        // Use student data from the application (already includes profile data from backend)
+        const student = app.student
+        if (!student) {
+          console.warn('No student data for application:', app.id)
+          return
+        }
+        
         try {
           const docsRes = await api.get(`/documents/${app.id}`)
           const docs = docsRes.data || []
           rows.push({
             studentId: app.student_id,
-            studentName: profile.full_name || 'Unknown',
-            studentEmail: profile.email || '',
-            studentIdCode: profile.student_id || '—',
+            studentName: student.full_name || 'Unknown',
+            studentEmail: student.email || '',
+            studentIdCode: student.student_id || '—',
             applicationId: app.id,
             totalDocs: docs.length,
             approvedDocs: docs.filter((d: any) => d.status === 'approved').length,
             pendingReview: docs.filter((d: any) => d.status === 'uploaded' || d.status === 'under_review').length,
           })
-        } catch {}
+        } catch (err) {
+          console.error('Error loading documents for app:', app.id, err)
+        }
       }))
 
+      console.log('Student rows created:', rows.length)
+      
       // Sort: pending review first, then by name
       rows.sort((a, b) => b.pendingReview - a.pendingReview || a.studentName.localeCompare(b.studentName))
       setStudents(rows)
