@@ -147,6 +147,41 @@ router.get('/counselors', authenticate, requireRole('admin'), async (req, res) =
   }
 });
 
+// GET /api/admin/students/:id - get student profile and extended profile
+router.get('/students/:id', authenticate, requireRole('admin', 'counselor', 'admissions'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Fetch profile
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (profileError) throw profileError;
+    
+    // Fetch extended student profile
+    const { data: studentProfile, error: studentError } = await supabase
+      .from('student_profiles')
+      .select('*')
+      .eq('user_id', id)
+      .maybeSingle();
+    
+    if (studentError && studentError.code !== 'PGRST116') {
+      console.error('Error fetching student profile:', studentError);
+    }
+    
+    res.json({
+      profile,
+      studentProfile: studentProfile || null
+    });
+  } catch (err) {
+    console.error('GET /admin/students/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /api/admin/staff/:id - remove a staff member
 router.delete('/staff/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {

@@ -54,20 +54,17 @@ export default function ApplicationDetailPage() {
       const app = appRes.data
       setApplication(app)
 
-      // Load student profile
-      const { data: p } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', app.student_id)
-        .single()
-      setStudent(p)
-
-      const { data: sp } = await supabase
-        .from('student_profiles')
-        .select('*')
-        .eq('user_id', app.student_id)
-        .single()
-      setStudentProfile(sp)
+      // Load student profile through backend API
+      if (app.student_id) {
+        try {
+          const studentRes = await api.get(`/admin/students/${app.student_id}`)
+          console.log('Student data from API:', studentRes.data)
+          setStudent(studentRes.data.profile)
+          setStudentProfile(studentRes.data.studentProfile)
+        } catch (err) {
+          console.error('Error fetching student data:', err)
+        }
+      }
 
       // Load documents
       const docsRes = await api.get(`/documents/${id}`)
