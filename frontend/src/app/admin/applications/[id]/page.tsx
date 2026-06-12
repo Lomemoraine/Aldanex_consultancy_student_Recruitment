@@ -73,12 +73,16 @@ export default function ApplicationDetailPage() {
       const docsRes = await api.get(`/documents/${id}`)
       setDocuments(docsRes.data || [])
 
-      // Load counselors for assignment
-      const { data: staff } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('role', ['counselor', 'admissions'])
-      setCounselors(staff || [])
+      // Load counselors for assignment - use backend API instead of direct Supabase query
+      console.log('Fetching counselors via API...')
+      try {
+        const counselorsRes = await api.get('/admin/counselors')
+        console.log('Counselors found via API:', counselorsRes.data)
+        setCounselors(counselorsRes.data || [])
+      } catch (err) {
+        console.error('Error fetching counselors:', err)
+        setCounselors([])
+      }
 
       if (app.assigned_counselor_id) setSelectedCounselor(app.assigned_counselor_id)
     } catch (err) {

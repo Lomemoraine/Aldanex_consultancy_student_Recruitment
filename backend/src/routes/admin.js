@@ -128,6 +128,25 @@ router.get('/staff', authenticate, requireRole('admin'), async (req, res) => {
   }
 });
 
+// GET /api/admin/counselors - list counselors and admissions officers for assignment
+router.get('/counselors', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .in('role', ['counselor', 'admissions'])
+      .order('full_name');
+
+    if (error) throw error;
+    
+    console.log('Counselors fetched for assignment:', data?.length || 0);
+    res.json(data || []);
+  } catch (err) {
+    console.error('GET /admin/counselors error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /api/admin/staff/:id - remove a staff member
 router.delete('/staff/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {
