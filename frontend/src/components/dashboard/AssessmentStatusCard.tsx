@@ -110,13 +110,35 @@ export default function AssessmentStatusCard({ application }: AssessmentStatusCa
                 <GraduationCap size={15} className="text-brand-600" />
                 Recommended Universities
               </h3>
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                {application.recommended_universities.map((university: string, idx: number) => (
-                  <div key={idx} className="flex items-center gap-2 text-sm">
-                    <div className="w-1.5 h-1.5 bg-brand-600 rounded-full" />
-                    <span className="text-gray-700">{university}</span>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {application.recommended_universities.map((university: string, idx: number) => {
+                  // Parse university string - format: "University Name|Country|Portal URL"
+                  const parts = university.split('|')
+                  const uniName = parts[0]
+                  const country = parts[1]
+                  const portalUrl = parts[2]
+                  
+                  return (
+                    <div key={idx} className="flex items-center justify-between gap-3 p-3 bg-white rounded-lg border border-blue-200 hover:border-brand-300 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{uniName}</p>
+                        {country && (
+                          <p className="text-xs text-gray-500">{country}</p>
+                        )}
+                      </div>
+                      {portalUrl && (
+                        <a
+                          href={portalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs px-3 py-1 bg-brand-100 text-brand-700 rounded hover:bg-brand-200 transition-colors font-medium shrink-0 whitespace-nowrap"
+                        >
+                          Learn More
+                        </a>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
