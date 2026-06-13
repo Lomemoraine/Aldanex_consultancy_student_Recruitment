@@ -269,12 +269,9 @@ export default function UniversitySelectionPage() {
                               required
                             >
                               <option value="">Select intake</option>
-                              <option value="January 2025">January 2025</option>
-                              <option value="May 2025">May 2025</option>
-                              <option value="September 2025">September 2025</option>
-                              <option value="January 2026">January 2026</option>
-                              <option value="May 2026">May 2026</option>
-                              <option value="September 2026">September 2026</option>
+                              <option value="January">January</option>
+                              <option value="May">May</option>
+                              <option value="September">September</option>
                             </select>
                           </div>
                           <div>
