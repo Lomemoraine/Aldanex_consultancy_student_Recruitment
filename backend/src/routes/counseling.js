@@ -329,21 +329,31 @@ router.post('/', authenticate, requireRole('admin', 'counselor'), async (req, re
 
     // Email + SMS
     try {
+      console.log('Fetching student data for notifications...');
       const { data: student } = await supabase
         .from('profiles')
         .select('full_name, email, phone')
         .eq('id', student_id)
         .single();
 
+      console.log('Student data:', student);
+
       if (student) {
         // Email
+        console.log('Preparing to send email to:', student.email);
         const { subject, html } = templates.sessionScheduledEmail(
           student.full_name, session_type, platform, scheduled_at, meeting_link
         );
-        await sendEmail({ to: student.email, subject, html });
+        
+        console.log('Email subject:', subject);
+        console.log('Calling sendEmail...');
+        
+        const emailResult = await sendEmail({ to: student.email, subject, html });
+        console.log('Email sent successfully:', emailResult);
 
         // SMS
         if (student.phone) {
+          console.log('Sending SMS to:', student.phone);
           const dateStr = new Date(scheduled_at).toLocaleString([], {
             weekday: 'short', month: 'short', day: 'numeric',
             hour: '2-digit', minute: '2-digit'
@@ -351,11 +361,19 @@ router.post('/', authenticate, requireRole('admin', 'counselor'), async (req, re
           const smsBody = smsTemplates.sessionScheduled(
             student.full_name.split(' ')[0], platform, dateStr
           );
-          sendSMS(student.phone, smsBody).catch(() => {});
+          sendSMS(student.phone, smsBody).catch((smsErr) => {
+            console.error('SMS sending failed:', smsErr);
+          });
+        } else {
+          console.log('No phone number for student, skipping SMS');
         }
+      } else {
+        console.error('Student data not found for id:', student_id);
       }
     } catch (notifErr) {
-      console.error('Session notification failed:', notifErr.message);
+      console.error('Session notification failed:', notifErr);
+      console.error('Error details:', notifErr.message);
+      console.error('Error stack:', notifErr.stack);
     }
 
     res.status(201).json(data);

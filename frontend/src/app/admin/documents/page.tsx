@@ -41,8 +41,39 @@ export default function AdminDocumentsPage() {
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<any | null>(null)
   const [deletingDocId, setDeletingDocId] = useState<string>('')
+  const [downloadingDocId, setDownloadingDocId] = useState<string>('')
 
   useEffect(() => { loadStudents() }, [])
+
+  async function handleDownloadDocument(doc: any) {
+    setDownloadingDocId(doc.id)
+    try {
+      // Fetch the file as a blob
+      const response = await fetch(doc.file_url)
+      if (!response.ok) throw new Error('Download failed')
+      
+      const blob = await response.blob()
+      
+      // Create a temporary URL for the blob
+      const blobUrl = window.URL.createObjectURL(blob)
+      
+      // Create a temporary anchor element and trigger download
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = doc.document_name || 'document'
+      document.body.appendChild(link)
+      link.click()
+      
+      // Cleanup
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      console.error('Download failed:', err)
+      alert('Failed to download document. Please try again.')
+    } finally {
+      setDownloadingDocId('')
+    }
+  }
 
   async function handleDeleteDoc(doc: any) {
     setDeletingDocId(doc.id)
@@ -469,16 +500,30 @@ export default function AdminDocumentsPage() {
                         {/* Action row */}
                         <div className="flex items-center gap-2 flex-wrap w-full">
 
-                          {/* View */}
+                          {/* View & Download */}
                           {doc.file_url && (
-                            <a
-                              href={doc.file_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 px-3 py-2 rounded-lg border border-brand-200 hover:bg-brand-50 transition-colors font-medium"
-                            >
-                              <Eye size={13} /> View Document
-                            </a>
+                            <>
+                              <a
+                                href={doc.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 px-3 py-2 rounded-lg border border-brand-200 hover:bg-brand-50 transition-colors font-medium"
+                              >
+                                <Eye size={13} /> View Document
+                              </a>
+                              <button
+                                onClick={() => handleDownloadDocument(doc)}
+                                disabled={downloadingDocId === doc.id}
+                                className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 px-3 py-2 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors font-medium disabled:opacity-50"
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                  <polyline points="7 10 12 15 17 10" />
+                                  <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                {downloadingDocId === doc.id ? 'Downloading...' : 'Download'}
+                              </button>
+                            </>
                           )}
 
                           {/* Delete Document */}
