@@ -262,7 +262,6 @@ export default function AssessmentsPage() {
                                   ...(form.academic_evaluation || {}),
                                   qualification: e.target.value
                                 })}
-                                disabled={student.assessment_status === 'completed'}
                               />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
@@ -277,7 +276,6 @@ export default function AssessmentsPage() {
                                     ...(form.academic_evaluation || {}),
                                     gpa: e.target.value
                                   })}
-                                  disabled={student.assessment_status === 'completed'}
                                 />
                               </div>
                               <div>
@@ -289,7 +287,6 @@ export default function AssessmentsPage() {
                                     ...(form.academic_evaluation || {}),
                                     rating: e.target.value
                                   })}
-                                  disabled={student.assessment_status === 'completed'}
                                 >
                                   <option value="">Select rating</option>
                                   <option value="excellent">Excellent</option>
@@ -318,7 +315,6 @@ export default function AssessmentsPage() {
                                   ...(form.financial_evaluation || {}),
                                   funding_source: e.target.value
                                 })}
-                                disabled={student.assessment_status === 'completed'}
                               >
                                 <option value="">Select source</option>
                                 <option value="self_funded">Self-Funded</option>
@@ -337,7 +333,6 @@ export default function AssessmentsPage() {
                                   ...(form.financial_evaluation || {}),
                                   rating: e.target.value
                                 })}
-                                disabled={student.assessment_status === 'completed'}
                               >
                                 <option value="">Select rating</option>
                                 <option value="strong">Strong</option>
@@ -365,7 +360,6 @@ export default function AssessmentsPage() {
                                     ...(form.english_proficiency_evaluation || {}),
                                     test_type: e.target.value
                                   })}
-                                  disabled={student.assessment_status === 'completed'}
                                 >
                                   <option value="">Select test</option>
                                   <option value="IELTS">IELTS</option>
@@ -386,7 +380,6 @@ export default function AssessmentsPage() {
                                     ...(form.english_proficiency_evaluation || {}),
                                     score: e.target.value
                                   })}
-                                  disabled={student.assessment_status === 'completed'}
                                 />
                               </div>
                             </div>
@@ -399,7 +392,6 @@ export default function AssessmentsPage() {
                                   ...(form.english_proficiency_evaluation || {}),
                                   rating: e.target.value
                                 })}
-                                disabled={student.assessment_status === 'completed'}
                               >
                                 <option value="">Select rating</option>
                                 <option value="excellent">Excellent</option>
@@ -426,7 +418,6 @@ export default function AssessmentsPage() {
                                     const countries = form.recommended_countries || []
                                     updateAssessmentForm(student.id, 'recommended_countries', [...countries, ''])
                                   }}
-                                  disabled={student.assessment_status === 'completed'}
                                   className="btn-secondary text-xs flex items-center gap-1"
                                 >
                                   <Plus size={12} /> Add Country
@@ -445,14 +436,12 @@ export default function AssessmentsPage() {
                                         countries[idx] = e.target.value
                                         updateAssessmentForm(student.id, 'recommended_countries', countries)
                                       }}
-                                      disabled={student.assessment_status === 'completed'}
                                     />
                                     <button
                                       onClick={() => {
                                         const countries = (form.recommended_countries || []).filter((_: any, i: number) => i !== idx)
                                         updateAssessmentForm(student.id, 'recommended_countries', countries)
                                       }}
-                                      disabled={student.assessment_status === 'completed'}
                                       className="btn-secondary text-xs px-2"
                                     >
                                       <X size={14} />
@@ -476,7 +465,6 @@ export default function AssessmentsPage() {
                                       [...universities, 'University Name|Country|https://portal-url.com']
                                     )
                                   }}
-                                  disabled={student.assessment_status === 'completed'}
                                   className="btn-secondary text-xs flex items-center gap-1"
                                 >
                                   <Plus size={12} /> Add University
@@ -500,7 +488,6 @@ export default function AssessmentsPage() {
                                             universities[idx] = `${e.target.value}|${country || ''}|${portalUrl || ''}`
                                             updateAssessmentForm(student.id, 'recommended_universities', universities)
                                           }}
-                                          disabled={student.assessment_status === 'completed'}
                                         />
                                         <input
                                           type="text"
@@ -512,7 +499,6 @@ export default function AssessmentsPage() {
                                             universities[idx] = `${uniName || ''}|${e.target.value}|${portalUrl || ''}`
                                             updateAssessmentForm(student.id, 'recommended_universities', universities)
                                           }}
-                                          disabled={student.assessment_status === 'completed'}
                                         />
                                       </div>
                                       <div className="flex gap-2">
@@ -526,14 +512,12 @@ export default function AssessmentsPage() {
                                             universities[idx] = `${uniName || ''}|${country || ''}|${e.target.value}`
                                             updateAssessmentForm(student.id, 'recommended_universities', universities)
                                           }}
-                                          disabled={student.assessment_status === 'completed'}
                                         />
                                         <button
                                           onClick={() => {
                                             const universities = (form.recommended_universities || []).filter((_: any, i: number) => i !== idx)
                                             updateAssessmentForm(student.id, 'recommended_universities', universities)
                                           }}
-                                          disabled={student.assessment_status === 'completed'}
                                           className="btn-secondary text-xs px-2"
                                         >
                                           <X size={14} />
@@ -564,7 +548,6 @@ export default function AssessmentsPage() {
                                 placeholder="85"
                                 value={form.assessment_score || ''}
                                 onChange={e => updateAssessmentForm(student.id, 'assessment_score', Number(e.target.value))}
-                                disabled={student.assessment_status === 'completed'}
                               />
                             </div>
                             <div>
@@ -575,14 +558,13 @@ export default function AssessmentsPage() {
                                 placeholder="Add detailed notes about the student's profile, strengths, areas of concern, and recommendations..."
                                 value={form.assessment_notes || ''}
                                 onChange={e => updateAssessmentForm(student.id, 'assessment_notes', e.target.value)}
-                                disabled={student.assessment_status === 'completed'}
                               />
                             </div>
                           </div>
                         </div>
 
                         {/* Actions */}
-                        {student.assessment_status === 'in_progress' && (
+                        {(student.assessment_status === 'in_progress' || student.assessment_status === 'completed') && (
                           <div className="pt-3 border-t border-gray-200 space-y-4">
                             {/* Save Progress */}
                             <button
@@ -591,7 +573,7 @@ export default function AssessmentsPage() {
                               className="btn-secondary flex items-center gap-2"
                             >
                               <Save size={16} />
-                              {saving === `save-${student.id}` ? 'Saving...' : 'Save Progress'}
+                              {saving === `save-${student.id}` ? 'Saving...' : (student.assessment_status === 'completed' ? 'Update Assessment' : 'Save Progress')}
                             </button>
 
                             {/* Complete Assessment */}
