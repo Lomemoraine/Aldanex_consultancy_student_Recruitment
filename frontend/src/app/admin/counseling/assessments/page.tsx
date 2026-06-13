@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import {
   ClipboardCheck, User, DollarSign, Globe, GraduationCap,
   CheckCircle, Clock, AlertCircle, ChevronDown, ChevronUp,
-  RefreshCw, Send, Calendar, Save
+  RefreshCw, Send, Calendar, Save, Plus, X
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -416,57 +416,144 @@ export default function AssessmentsPage() {
                             <CheckCircle size={15} className="text-brand-600" />
                             Recommendations
                           </h3>
-                          <div className="bg-white rounded-lg border border-gray-100 p-4 space-y-3">
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 space-y-4">
+                            {/* Recommended Countries */}
                             <div>
-                              <label className="label text-xs">Recommended Countries</label>
-                              <input
-                                type="text"
-                                className="input text-sm"
-                                placeholder="e.g., United Kingdom, Canada, Australia"
-                                value={form.recommended_countries?.join(', ') || ''}
-                                onChange={e => updateAssessmentForm(student.id, 'recommended_countries', 
-                                  e.target.value.split(',').map(c => c.trim()).filter(Boolean)
+                              <div className="flex items-center justify-between mb-2">
+                                <label className="label text-xs">Recommended Countries</label>
+                                <button
+                                  onClick={() => {
+                                    const countries = form.recommended_countries || []
+                                    updateAssessmentForm(student.id, 'recommended_countries', [...countries, ''])
+                                  }}
+                                  disabled={student.assessment_status === 'completed'}
+                                  className="btn-secondary text-xs flex items-center gap-1"
+                                >
+                                  <Plus size={12} /> Add Country
+                                </button>
+                              </div>
+                              <div className="space-y-2">
+                                {(form.recommended_countries || []).map((country: string, idx: number) => (
+                                  <div key={idx} className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      className="input text-sm flex-1"
+                                      placeholder="e.g., United Kingdom"
+                                      value={country}
+                                      onChange={e => {
+                                        const countries = [...(form.recommended_countries || [])]
+                                        countries[idx] = e.target.value
+                                        updateAssessmentForm(student.id, 'recommended_countries', countries)
+                                      }}
+                                      disabled={student.assessment_status === 'completed'}
+                                    />
+                                    <button
+                                      onClick={() => {
+                                        const countries = (form.recommended_countries || []).filter((_: any, i: number) => i !== idx)
+                                        updateAssessmentForm(student.id, 'recommended_countries', countries)
+                                      }}
+                                      disabled={student.assessment_status === 'completed'}
+                                      className="btn-secondary text-xs px-2"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                ))}
+                                {(!form.recommended_countries || form.recommended_countries.length === 0) && (
+                                  <p className="text-xs text-gray-400 py-2">No countries added yet</p>
                                 )}
-                                disabled={student.assessment_status === 'completed'}
-                              />
-                            </div>
-                            <div>
-                              <label className="label text-xs">Recommended Universities (with Application Portal Links)</label>
-                              <textarea
-                                className="input text-sm font-mono"
-                                rows={5}
-                                placeholder="Format: University Name|Country|Portal URL (one per line)&#10;&#10;Examples:&#10;University of Manchester|United Kingdom|https://www.manchester.ac.uk/study/international/&#10;University of Toronto|Canada|https://future.utoronto.ca/apply/&#10;University of Melbourne|Australia|https://study.unimelb.edu.au/how-to-apply"
-                                value={form.recommended_universities?.join('\n') || ''}
-                                onChange={e => updateAssessmentForm(student.id, 'recommended_universities',
-                                  e.target.value.split('\n').map(u => u.trim()).filter(Boolean)
-                                )}
-                                disabled={student.assessment_status === 'completed'}
-                              />
-                              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                <p className="text-xs text-blue-800 font-semibold mb-1">📝 Format Guide:</p>
-                                <p className="text-xs text-blue-700 mb-2">
-                                  Each line should follow: <code className="bg-blue-100 px-1 py-0.5 rounded">Name|Country|Portal URL</code>
-                                </p>
-                                <div className="text-xs text-blue-600 space-y-1">
-                                  <div className="flex items-start gap-2">
-                                    <span className="text-blue-500">✓</span>
-                                    <span>Use pipe character <code className="bg-blue-100 px-1 py-0.5 rounded">|</code> to separate parts</span>
-                                  </div>
-                                  <div className="flex items-start gap-2">
-                                    <span className="text-blue-500">✓</span>
-                                    <span>One university per line</span>
-                                  </div>
-                                  <div className="flex items-start gap-2">
-                                    <span className="text-blue-500">✓</span>
-                                    <span>Include full URL with https://</span>
-                                  </div>
-                                  <div className="flex items-start gap-2">
-                                    <span className="text-blue-500">✓</span>
-                                    <span>Students will see "Apply Now" button linking to the portal</span>
-                                  </div>
-                                </div>
                               </div>
                             </div>
+
+                            {/* Recommended Universities */}
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <label className="label text-xs">Recommended Universities</label>
+                                <button
+                                  onClick={() => {
+                                    const universities = form.recommended_universities || []
+                                    updateAssessmentForm(student.id, 'recommended_universities', 
+                                      [...universities, 'University Name|Country|https://portal-url.com']
+                                    )
+                                  }}
+                                  disabled={student.assessment_status === 'completed'}
+                                  className="btn-secondary text-xs flex items-center gap-1"
+                                >
+                                  <Plus size={12} /> Add University
+                                </button>
+                              </div>
+                              <div className="space-y-2">
+                                {(form.recommended_universities || []).map((uni: string, idx: number) => {
+                                  const parts = uni.split('|')
+                                  const [uniName, country, portalUrl] = parts
+                                  
+                                  return (
+                                    <div key={idx} className="bg-gray-50 rounded-lg p-3 space-y-2">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <input
+                                          type="text"
+                                          className="input text-sm"
+                                          placeholder="e.g., University of Manchester"
+                                          value={uniName || ''}
+                                          onChange={e => {
+                                            const universities = [...(form.recommended_universities || [])]
+                                            universities[idx] = `${e.target.value}|${country || ''}|${portalUrl || ''}`
+                                            updateAssessmentForm(student.id, 'recommended_universities', universities)
+                                          }}
+                                          disabled={student.assessment_status === 'completed'}
+                                        />
+                                        <input
+                                          type="text"
+                                          className="input text-sm"
+                                          placeholder="e.g., United Kingdom"
+                                          value={country || ''}
+                                          onChange={e => {
+                                            const universities = [...(form.recommended_universities || [])]
+                                            universities[idx] = `${uniName || ''}|${e.target.value}|${portalUrl || ''}`
+                                            updateAssessmentForm(student.id, 'recommended_universities', universities)
+                                          }}
+                                          disabled={student.assessment_status === 'completed'}
+                                        />
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <input
+                                          type="url"
+                                          className="input text-sm flex-1"
+                                          placeholder="e.g., https://www.manchester.ac.uk/study/international/"
+                                          value={portalUrl || ''}
+                                          onChange={e => {
+                                            const universities = [...(form.recommended_universities || [])]
+                                            universities[idx] = `${uniName || ''}|${country || ''}|${e.target.value}`
+                                            updateAssessmentForm(student.id, 'recommended_universities', universities)
+                                          }}
+                                          disabled={student.assessment_status === 'completed'}
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            const universities = (form.recommended_universities || []).filter((_: any, i: number) => i !== idx)
+                                            updateAssessmentForm(student.id, 'recommended_universities', universities)
+                                          }}
+                                          disabled={student.assessment_status === 'completed'}
+                                          className="btn-secondary text-xs px-2"
+                                        >
+                                          <X size={14} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                                {(!form.recommended_universities || form.recommended_universities.length === 0) && (
+                                  <p className="text-xs text-gray-400 py-2">No universities added yet</p>
+                                )}
+                              </div>
+                              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <p className="text-xs text-blue-800 font-semibold mb-1">💡 How to use:</p>
+                                <p className="text-xs text-blue-700">
+                                  Click "Add University" to add each university. Enter the university name, country, and application portal link. Students will see these as recommendations with links to apply.
+                                </p>
+                              </div>
+                            </div>
+
                             <div>
                               <label className="label text-xs">Overall Assessment Score (0-100)</label>
                               <input
