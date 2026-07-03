@@ -95,16 +95,26 @@ router.post('/upload-url', authenticate, async (req, res) => {
 // POST /api/documents - register a document after upload
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { application_id, category, document_name, file_path, file_type, file_size_kb, expiry_date } = req.body;
+    const { application_id, category, document_name, file_path, file_type, file_size_kb, expiry_date, student_id } = req.body;
 
-    const studentId = req.user.profile?.id || req.user.id;
+    // If student_id is provided (admin uploading on behalf), use it; otherwise use logged-in user's ID
+    const finalStudentId = student_id || req.user.profile?.id || req.user.id;
+
+    console.log('Creating document record:', {
+      application_id,
+      student_id: finalStudentId,
+      category,
+      document_name,
+      uploaded_by: req.user.profile?.id || req.user.id,
+      uploaded_by_role: req.user.profile?.role || req.user.role,
+    });
 
     // Store the file_path (not a public URL) — signed URLs are generated on read
     const { data, error } = await supabase
       .from('documents')
       .insert({
         application_id,
-        student_id: studentId,
+        student_id: finalStudentId,
         category,
         document_name,
         file_url: file_path,   // store path, not public URL
@@ -118,7 +128,12 @@ router.post('/', authenticate, async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Document insert error:', error);
+      throw error;
+    }
+
+    console.log('Document created successfully:', data.id);
 
     // Generate signed URL for the response
     const signedUrl = await getSignedUrl(file_path);
@@ -127,7 +142,7 @@ router.post('/', authenticate, async (req, res) => {
     // Notify counselor
     const { data: app } = await supabase
       .from('applications')
-      .select('assigned_counselor_id')
+      .select('assigned_counselor_id, student_id')
       .eq('id', application_id)
       .single();
 
@@ -136,7 +151,7 @@ router.post('/', authenticate, async (req, res) => {
         user_id: app.assigned_counselor_id,
         type: 'action_required',
         title: 'New Document Uploaded',
-        message: `A student has uploaded a new document: ${document_name}`,
+        message: `A document has been uploaded for a student: ${document_name}`,
         link: `/admin/documents`,
       });
     }

@@ -123,8 +123,8 @@ function LoginForm() {
           </div>
 
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-            <p className="text-gray-500 mt-1 text-sm">Sign in to your student portal</p>
+            <h1 className="text-2xl font-bold text-gray-900 text-center">Welcome Back</h1>
+            <p className="text-gray-500 mt-1 text-sm"></p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8">

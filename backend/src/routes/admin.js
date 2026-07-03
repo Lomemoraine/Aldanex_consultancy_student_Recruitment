@@ -182,6 +182,135 @@ router.get('/students/:id', authenticate, requireRole('admin', 'counselor', 'adm
   }
 });
 
+// POST /api/admin/create-student - create student account (admin/counselor/admissions only)
+router.post('/create-student', authenticate, requireRole('admin', 'counselor', 'admissions'), async (req, res) => {
+  try {
+    const {
+      full_name,
+      email,
+      password,
+      phone,
+      date_of_birth,
+      nationality,
+      current_country,
+      education_level,
+      field_of_interest,
+      preferred_study_destination
+    } = req.body;
+
+    console.log('Creating student account:', { email, full_name, nationality, preferred_study_destination });
+
+    // Validation
+    if (!full_name || !email || !password) {
+      return res.status(400).json({ error: 'Full name, email, and password are required' });
+    }
+
+    // 1. Create auth user
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      app_metadata: { role: 'student' },
+    });
+
+    if (authError) {
+      console.error('Auth creation error:', authError);
+      throw authError;
+    }
+
+    console.log('Auth user created:', authData.user.id);
+
+    // 2. Create profile (includes nationality and preferred_study_destination)
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: authData.user.id,
+        role: 'student',
+        full_name,
+        email,
+        phone: phone || null,
+        nationality: nationality || null,
+        preferred_study_destination: preferred_study_destination || null,
+      })
+      .select()
+      .single();
+
+    if (profileError) {
+      console.error('Profile creation error:', profileError);
+      // Cleanup: delete auth user if profile creation fails
+      await supabase.auth.admin.deleteUser(authData.user.id);
+      throw profileError;
+    }
+
+    console.log('Profile created with nationality and destination');
+
+    // 3. Create student profile (extended details)
+    const { data: studentProfile, error: studentError } = await supabase
+      .from('student_profiles')
+      .insert({
+        user_id: authData.user.id,
+        date_of_birth: date_of_birth || null,
+        current_country: current_country || null,
+        education_level: education_level || null,
+        field_of_interest: field_of_interest || null,
+      })
+      .select()
+      .single();
+
+    if (studentError) {
+      console.error('Student profile creation error:', studentError);
+      // Cleanup not critical here since FK will cascade
+    }
+
+    console.log('Student profile created');
+
+    // 4. Create initial application
+    const createdBy = req.user.profile?.id || req.user.id;
+    const { data: application, error: appError } = await supabase
+      .from('applications')
+      .insert({
+        student_id: authData.user.id,
+        current_stage: 'profile_creation',
+        is_active: true,
+        assigned_counselor_id: req.user.profile?.role === 'counselor' ? createdBy : null,
+      })
+      .select()
+      .single();
+
+    if (appError) {
+      console.error('Application creation error:', appError);
+    } else {
+      console.log('Application created:', application.id);
+    }
+
+    // 5. Send welcome notification
+    try {
+      await supabase.from('notifications').insert({
+        user_id: authData.user.id,
+        title: 'Welcome to Aldanex Consultancy',
+        message: `Your account has been created by ${req.user.profile?.full_name || 'admin'}. You can now log in and complete your profile.`,
+        type: 'info',
+      });
+      console.log('Welcome notification sent');
+    } catch (notifErr) {
+      console.error('Notification creation error:', notifErr);
+    }
+
+    res.status(201).json({
+      message: 'Student account created successfully',
+      student: {
+        id: authData.user.id,
+        full_name,
+        email,
+        application_id: application?.id,
+      },
+    });
+  } catch (err) {
+    console.error('POST /admin/create-student error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /api/admin/staff/:id - remove a staff member
 router.delete('/staff/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {

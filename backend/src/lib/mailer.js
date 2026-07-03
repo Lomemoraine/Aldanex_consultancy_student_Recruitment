@@ -11,6 +11,19 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
  * @param {string} [options.text] - Plain text fallback
  */
 async function sendEmail({ to, subject, html, text }) {
+  console.log('=== sendEmail called ===');
+  console.log('Recipient:', to);
+  console.log('Subject:', subject);
+  
+  // Check if API key is configured
+  const apiKey = process.env.SENDGRID_API_KEY;
+  if (!apiKey) {
+    console.error('ERROR: SENDGRID_API_KEY is not set in environment variables');
+    throw new Error('SendGrid API key is not configured');
+  }
+  
+  console.log('API key status:', apiKey.substring(0, 10) + '...');
+  
   const msg = {
     to,
     from: {
@@ -22,8 +35,21 @@ async function sendEmail({ to, subject, html, text }) {
     text: text || html.replace(/<[^>]*>/g, ''),
   };
 
-  const response = await sgMail.send(msg);
-  return response;
+  console.log('From:', msg.from.email);
+  
+  try {
+    const response = await sgMail.send(msg);
+    console.log('SendGrid response status:', response[0]?.statusCode);
+    console.log('Email sent successfully to:', to);
+    return response;
+  } catch (error) {
+    console.error('=== SendGrid Error ===');
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    console.error('Response status:', error.response?.statusCode);
+    console.error('Response body:', JSON.stringify(error.response?.body, null, 2));
+    throw error;
+  }
 }
 
 // ── Email Templates ──────────────────────────────────────────

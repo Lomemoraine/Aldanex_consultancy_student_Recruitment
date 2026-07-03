@@ -16,19 +16,21 @@ import api from '@/lib/api'
 // ── Role-based nav ────────────────────────────────────────────
 // roles: null = all staff | string[] = only those roles
 const adminNav = [
-  { href: '/admin',              label: 'Dashboard',    icon: LayoutDashboard, roles: null },
-  { href: '/admin/students',     label: 'Students',     icon: Users,           roles: ['admin', 'counselor', 'admissions'] },
-  { href: '/admin/applications', label: 'Applications', icon: FileText,        roles: null },
-  { href: '/admin/admissions',   label: 'Admissions',   icon: ClipboardList,   roles: ['admin', 'admissions'] },
-  { href: '/admin/documents',    label: 'Documents',    icon: FileText,        roles: null },
-  { href: '/admin/counseling',   label: 'Counseling',   icon: MessageSquare,   roles: ['admin', 'counselor'] },
-  { href: '/admin/messages',     label: 'Messages',     icon: Mail,            roles: null },
-  { href: '/admin/universities', label: 'Universities', icon: GraduationCap,   roles: ['counselor'] },
+  { href: '/admin',              label: 'Dashboard',        icon: LayoutDashboard, roles: null },
+  { href: '/admin/students',     label: 'Students',         icon: Users,           roles: ['admin', 'counselor', 'admissions'] },
+  { href: '/admin/add-student',  label: 'Add Student',      icon: Users,           roles: ['admin', 'counselor', 'admissions'] },
+  { href: '/admin/applications', label: 'Applications',     icon: FileText,        roles: null },
+  { href: '/admin/admissions',   label: 'Admissions',       icon: ClipboardList,   roles: ['admin', 'admissions'] },
+  { href: '/admin/documents',    label: 'Documents',        icon: FileText,        roles: null },
+  { href: '/admin/upload-documents', label: 'Upload Documents', icon: FileText,    roles: ['admin', 'counselor', 'admissions'] },
+  { href: '/admin/counseling',   label: 'Counseling',       icon: MessageSquare,   roles: ['admin', 'counselor'] },
+  { href: '/admin/messages',     label: 'Messages',         icon: Mail,            roles: null },
+  { href: '/admin/universities', label: 'Universities',     icon: GraduationCap,   roles: ['counselor'] },
   { href: '/admin/universities/prepare', label: 'Preparation', icon: ClipboardList, roles: ['counselor'], indent: true },
-  { href: '/admin/visa',         label: 'Visa',         icon: Plane,           roles: ['admin', 'counselor'] },
-  { href: '/admin/payments',     label: 'Payments',     icon: CreditCard,      roles: ['admin', 'admissions'] },
-  { href: '/admin/staff',        label: 'Staff',        icon: UserCog,         roles: ['admin'] },
-  { href: '/admin/settings',     label: 'Settings',     icon: Settings,        roles: null },
+  { href: '/admin/visa',         label: 'Visa',             icon: Plane,           roles: ['admin', 'counselor'] },
+  { href: '/admin/payments',     label: 'Payments',         icon: CreditCard,      roles: ['admin', 'admissions'] },
+  { href: '/admin/staff',        label: 'Staff',            icon: UserCog,         roles: ['admin'] },
+  { href: '/admin/settings',     label: 'Settings',         icon: Settings,        roles: null },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
